@@ -1,0 +1,50 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "MiniGame/PTWMiniGameMode.h"
+#include "PTWCopsAndRobbersGameMode.generated.h"
+
+#define ROBBERS 0
+#define COPS 1
+
+class UGameplayAbility;
+class UGameplayEffect;
+class UPTWCARControllerComponent;
+
+/* [경찰과 도둑 게임모드]
+ * [도둑3 : 경찰1] 비율로 팀을 나누는 게임
+ * 기본적으로 서바이벌 승리 조건을 따름.
+ * 만약 타이머가 종료되면 도둑팀이 승리
+ */
+UCLASS()
+class PTW_API APTWCopsAndRobbersGameMode : public APTWMiniGameMode
+{
+	GENERATED_BODY()
+	
+public:
+	APTWCopsAndRobbersGameMode();
+
+protected:
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void StartGame() override;
+	virtual void EndGame() override;
+	virtual void EndTimer() override;
+	virtual void WaitingToStartRound() override;
+	virtual void HandleSeamlessTravelPlayer(AController*& C) override;
+	virtual void AssignTeam() override;
+	virtual void HandlePlayerDeath(AActor* DeadActor, AActor* KillActor) override;
+	
+public:
+	
+protected:
+	UPROPERTY(EditAnywhere, Category="GAS|GameplayEffects")
+	TSubclassOf<UGameplayEffect> BlindGameplayEffect;
+	
+	UPROPERTY(EditAnywhere, Category="GAS|GameplayEffects")
+	TSubclassOf<UGameplayEffect> ReboundGameplayEffect;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cops|Weapon")
+	TObjectPtr<UPTWItemDefinition> CopsWeaponDefinition;
+};

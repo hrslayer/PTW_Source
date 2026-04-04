@@ -1,0 +1,333 @@
+﻿// Fill out your copyright notice in the Description page of Project Settings.
+
+#include "PTW/GAS/PTWAttributeSet.h"
+
+#include "Net/UnrealNetwork.h"
+#include "GameplayEffectExtension.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "PTW/CoreFramework/PTWPlayerCharacter.h"
+#include "CoreFramework/PTWPlayerController.h"
+#include "CoreFramework/Character/Component/PTWReactorComponent.h"
+#include "Debug/PTWLogCategorys.h"
+#include "MiniGame/GameMode/PTWGhostChaseMiniGameMode.h"
+
+UPTWAttributeSet::UPTWAttributeSet()
+{
+	InitHealth(100.0f);
+	InitMaxHealth(100.0f);
+	InitMoveSpeed(500.0f);
+	InitJumpZVelocity(420.0f);
+}
+
+void UPTWAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME_CONDITION_NOTIFY(UPTWAttributeSet, Health, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UPTWAttributeSet, MaxHealth, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UPTWAttributeSet, MoveSpeed, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UPTWAttributeSet, JumpZVelocity, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UPTWAttributeSet, Defense, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UPTWAttributeSet, Shield, COND_None, REPNOTIFY_Always);
+}
+
+
+void UPTWAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
+{
+	Super::PreAttributeChange(Attribute, NewValue);
+
+	if (Attribute == GetHealthAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0.0f, GetMaxHealth());
+	}
+	if (Attribute == GetMoveSpeedAttribute())
+	{
+		NewValue = FMath::Max(NewValue, 0.0f);
+	}
+	else if (Attribute == GetJumpZVelocityAttribute())
+	{
+		NewValue = FMath::Max(NewValue, 0.0f);
+	}
+}
+
+void UPTWAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
+{
+	Super::PostGameplayEffectExecute(Data);
+
+	// 해당 코드 주석 처리 (26.03.23)
+	// UAbilitySystemComponent* Source = Context.GetOriginalInstigatorAbilitySystemComponent();
+	// if (Data.EvaluatedData.Attribute == GetHealthAttribute())
+	// {
+	// 	if (Data.EvaluatedData.Magnitude < 0.f)
+	// 	{
+	// 		HandleDamage(Data);
+	// 	}
+	//
+	// 	SetHealth(FMath::Clamp(GetHealth(), 0.0f, GetMaxHealth()));
+	//
+	// 	if (GetHealth() <= 0.0f)
+	// 	{
+	// 		AActor* TargetActor = Data.Target.GetAvatarActor();
+	// 		APTWBaseCharacter* TargetCharacter = Cast<APTWBaseCharacter>(TargetActor);
+	//
+	// 		if (TargetCharacter && !TargetCharacter->IsDead())
+	// 		{
+	// 			TargetCharacter->HandleDeath(SourceActor);
+	// 		}
+	// 	}
+	// 	if (GetHealth() > 0.0f)
+	// 	{
+	// 		APTWBaseCharacter* TargetChar = Cast<APTWBaseCharacter>(Data.Target.GetAvatarActor());
+	// 		if (TargetChar && !TargetChar->IsDead())
+	// 		{
+	// 			const FHitResult* Hit = Data.EffectSpec.GetContext().GetHitResult();
+	// 			FVector ImpactPoint = Hit ? (FVector)Hit->ImpactPoint : TargetChar->GetActorLocation();
+	//
+	// 			TargetChar->GetReactorComponent()->Multicast_PlayHitReact(ImpactPoint);
+	// 		}
+	// 	}
+	//
+	// }
+	
+	FGameplayEffectContextHandle Context = Data.EffectSpec.GetContext();
+	AActor* SourceActor = Context.GetInstigator();
+	AActor* Target = Data.Target.GetAvatarActor();
+	APTWBaseCharacter* TargetChar = Cast<APTWBaseCharacter>(Target);
+	
+	if (Data.EvaluatedData.Attribute == GetIncomingDamageAttribute())
+	{
+		if (Data.EvaluatedData.Magnitude < 0.f)
+		{
+			HandleDamage(Data);
+		}
+		
+		const float DamageToApply = GetIncomingDamage();
+		SetIncomingDamage(0.0f);
+
+		if (DamageToApply > 0.0f && TargetChar)
+		{
+			const float CurrentShield = GetShield();
+			const float CurrentHealth = GetHealth();
+
+			const float ShieldAbsorbed = FMath::Min(CurrentShield, DamageToApply);
+			if (ShieldAbsorbed > 0.0f)
+			{
+				SetShield(CurrentShield - ShieldAbsorbed);
+			}
+
+			const float RemainingDamage = DamageToApply - ShieldAbsorbed;
+			if (RemainingDamage > 0.0f)
+			{
+				const float NewHealth = FMath::Clamp(CurrentHealth - RemainingDamage, 0.0f, GetMaxHealth());
+				SetHealth(NewHealth);
+
+				UAbilitySystemComponent* SourceASC = Data.EffectSpec.GetContext().GetOriginalInstigatorAbilitySystemComponent();
+				UAbilitySystemComponent* TargetASC = GetOwningAbilitySystemComponent();
+
+				UE_LOG(Log_AbilityBattle, Warning, TEXT("SourceASC: %p"), SourceASC);
+				UE_LOG(Log_AbilityBattle, Warning, TEXT("TargetASC: %p"), TargetASC);
+				
+				OnDamageApplied.Broadcast(TargetASC, SourceASC, RemainingDamage);
+			}
+			
+			
+			if (GetHealth() <= 0.0f)
+			{
+				if (!TargetChar->IsDead())
+				{
+					TargetChar->HandleDeath(SourceActor);
+				}
+			}
+			else
+			{
+				const FHitResult* Hit = Context.GetHitResult();
+				FVector ImpactPoint = Hit ? (FVector)Hit->ImpactPoint : TargetChar->GetActorLocation();
+
+				if (TargetChar->GetReactorComponent())
+				{
+					TargetChar->GetReactorComponent()->Multicast_PlayHitReact(ImpactPoint);
+				}
+			}
+		}
+	}
+
+
+
+	
+	AActor* TargetActor = nullptr;
+	ACharacter* TargetCharacter = nullptr;
+	if (Data.Target.AbilityActorInfo.IsValid() && Data.Target.AbilityActorInfo->AvatarActor.IsValid())
+	{
+		TargetActor = Data.Target.AbilityActorInfo->AvatarActor.Get();
+		TargetCharacter = Cast<ACharacter>(TargetActor);
+	}
+
+	if (TargetCharacter && TargetCharacter->GetCharacterMovement())
+	{
+		if (Data.EvaluatedData.Attribute == GetMoveSpeedAttribute())
+		{
+			TargetCharacter->GetCharacterMovement()->MaxWalkSpeed = GetMoveSpeed();
+		}
+		else if (Data.EvaluatedData.Attribute == GetJumpZVelocityAttribute())
+		{
+			TargetCharacter->GetCharacterMovement()->JumpZVelocity = GetJumpZVelocity();
+		}
+	}
+
+}
+
+void UPTWAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue)
+{
+	Super::PostAttributeChange(Attribute, OldValue, NewValue);
+
+	if (Attribute == GetMoveSpeedAttribute())
+	{
+		UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent();
+		if (ASC && ASC->GetAvatarActor())
+		{
+			ACharacter* Character = Cast<ACharacter>(ASC->GetAvatarActor());
+			if (Character && Character->GetCharacterMovement())
+			{
+				Character->GetCharacterMovement()->MaxWalkSpeed = NewValue;
+			}
+		}
+	}
+	if (Attribute == GetJumpZVelocityAttribute())
+	{
+		UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent();
+		if (ASC && ASC->GetAvatarActor())
+		{
+			ACharacter* Character = Cast<ACharacter>(ASC->GetAvatarActor());
+			if (Character && Character->GetCharacterMovement())
+			{
+				Character->GetCharacterMovement()->JumpZVelocity = NewValue;
+			}
+		}
+	}
+}
+
+bool UPTWAttributeSet::PreGameplayEffectExecute(FGameplayEffectModCallbackData& Data)
+{
+	if (Data.EvaluatedData.Attribute == GetHealthAttribute())
+	{
+		// 데미지인지 확인 (음수 = 데미지)
+		if (Data.EvaluatedData.Magnitude < 0.f)
+		{
+			if (!IsDamageToValidTarget(Data))
+			{
+				// Target이 아니면 데미지 차단
+				return false;
+			}
+		}
+	}
+
+	return Super::PreGameplayEffectExecute(Data);
+}
+
+void UPTWAttributeSet::OnRep_Health(const FGameplayAttributeData& OldHealth) { GAMEPLAYATTRIBUTE_REPNOTIFY(UPTWAttributeSet, Health, OldHealth); }
+void UPTWAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldMaxHealth) { GAMEPLAYATTRIBUTE_REPNOTIFY(UPTWAttributeSet, MaxHealth, OldMaxHealth); }
+
+void UPTWAttributeSet::OnRep_MoveSpeed(const FGameplayAttributeData& OldMoveSpeed)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UPTWAttributeSet, MoveSpeed, OldMoveSpeed);
+	
+	if (UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent())
+	{
+		if (ACharacter* Character = Cast<ACharacter>(ASC->GetAvatarActor()))
+		{
+			if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
+			{
+				MoveComp->MaxWalkSpeed = GetMoveSpeed();
+			}
+		}
+	}
+}
+
+void UPTWAttributeSet::OnRep_JumpZVelocity(const FGameplayAttributeData& OldJumpZVelocity) { GAMEPLAYATTRIBUTE_REPNOTIFY(UPTWAttributeSet, JumpZVelocity, OldJumpZVelocity); }
+
+void UPTWAttributeSet::OnRep_Defense(const FGameplayAttributeData& OldDefense)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UPTWAttributeSet, Defense, OldDefense);
+}
+
+
+void UPTWAttributeSet::OnRep_Shield(const FGameplayAttributeData& OldShield)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UPTWAttributeSet, Shield, OldShield);
+}
+
+void UPTWAttributeSet::HandleDamage(const FGameplayEffectModCallbackData& Data)
+{
+	AActor* TargetActor = Data.Target.GetAvatarActor();
+	if (!TargetActor) return;
+
+	APawn* TargetPawn = Cast<APawn>(TargetActor);
+	if (!TargetPawn) return;
+
+	FVector DamageCauserLocation = FVector::ZeroVector;
+
+	const FGameplayEffectContextHandle& Context =
+		Data.EffectSpec.GetContext();
+
+	if (Context.GetHitResult())
+	{
+		DamageCauserLocation =
+			Context.GetHitResult()->TraceStart;
+	}
+	else if (AActor* Instigator = Context.GetInstigator())
+	{
+		DamageCauserLocation =
+			Instigator->GetActorLocation();
+	}
+
+	// PlayerController로 전달
+	if (APTWPlayerController* PC = Cast<APTWPlayerController>(TargetPawn->GetController()))
+	{
+		PC->ClientRPC_ShowDamageIndicator(DamageCauserLocation);
+	}
+}
+
+bool UPTWAttributeSet::IsDamageToValidTarget(const FGameplayEffectModCallbackData& Data) const
+{
+	const FGameplayEffectContextHandle& Context = Data.EffectSpec.GetContext();
+
+	UAbilitySystemComponent* SourceASC = Context.GetOriginalInstigatorAbilitySystemComponent();
+
+	if (!SourceASC)
+	{
+		return false;
+	}
+
+	APawn* SourcePawn = Cast<APawn>(SourceASC->GetAvatarActor());
+	APawn* TargetPawn = Cast<APawn>(Data.Target.GetAvatarActor());
+
+	if (!SourcePawn || !TargetPawn)
+	{
+		return false;
+	}
+
+	AController* SourceController = SourcePawn->GetController();
+	AController* TargetController = TargetPawn->GetController();
+
+	if (!SourceController || !TargetController)
+	{
+		return false;
+	}
+
+	UWorld* World = SourcePawn->GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+
+	APTWGhostChaseMiniGameMode* GM = Cast<APTWGhostChaseMiniGameMode>(World->GetAuthGameMode());
+
+	// 다른 게임모드면 제한 없음
+	if (!GM)
+	{
+		return true;
+	}
+
+	return GM->IsValidChaseTarget(SourceController, TargetController);
+}

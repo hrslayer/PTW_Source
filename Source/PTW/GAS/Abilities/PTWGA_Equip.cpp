@@ -1,0 +1,99 @@
+﻿// Fill out your copyright notice in the Description page of Project Settings.
+
+
+#include "PTWGA_Equip.h"
+
+#include "AbilitySystemComponent.h"
+#include "CoreFramework/PTWPlayerCharacter.h"
+#include "GAS/PTWWeaponAttributeSet.h"
+#include "Inventory/PTWInventoryComponent.h"
+#include "Inventory/PTWItemDefinition.h"
+#include "Inventory/Instance/PTWItemInstance.h"
+#include "Weapon/PTWWeaponActor.h"
+#include "Weapon/PTWWeaponData.h"
+#include "CoreFramework/Character/Component/PTWWeaponComponent.h"
+#include "Inventory/Instance/PTWWeaponInstance.h"
+#include "PTWGameplayTag/GameplayTags.h"
+
+UPTWGA_Equip::UPTWGA_Equip()
+{
+
+}
+
+void UPTWGA_Equip::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
+                                const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
+{
+	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+	
+	const UPTWItemInstance* WeaponItemInstance = Cast<UPTWItemInstance>(TriggerEventData->OptionalObject);
+	if (WeaponItemInstance)
+	{
+		FGameplayTag CurrentWeaponTag = WeaponItemInstance->ItemDef->WeaponTag;
+		APTWPlayerCharacter* Character = GetPTWPlayerCharacterFromActorInfo();
+
+		if (HasAuthority(&CurrentActivationInfo))
+		{
+			Character->GetWeaponComponent()->EquipWeaponByTag(CurrentWeaponTag);
+			 if (UPTWInventoryComponent* InvenComp = Character->GetInventoryComponent())
+			 {
+			 	InvenComp->SetCurrentWeaponInst(WeaponItemInstance);
+			 }
+		}
+		
+		SetCharacterWeaponAttribute(Cast<UPTWWeaponInstance>(WeaponItemInstance), Character);
+		
+		FGameplayTag StatTag = GameplayTags::Weapon::State::Equip;
+		UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+		if (!ASC) return;
+		
+		if (IPTWCombatInterface* CombInt = Cast<IPTWCombatInterface>(Character))
+		{
+			if (ASC->HasMatchingGameplayTag(GameplayTags::Weapon::State::UnEquip))
+			{
+				CombInt->RemoveEffectWithTag(GameplayTags::Weapon::State::UnEquip);
+			}
+			
+			FGameplayEffectContextHandle Context;
+			CombInt->ApplyGameplayEffectToSelf(EquipEffect, 1.0f, Context);
+		}
+	}
+	
+	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+}
+
+
+void UPTWGA_Equip::SetCharacterWeaponAttribute(const UPTWWeaponInstance* WeaponItemInstance,
+	APTWPlayerCharacter* Character)
+{
+	if (WeaponItemInstance)
+	{
+		if (HasAuthority(&CurrentActivationInfo))
+		{
+			UAbilitySystemComponent* ASC = Character->GetAbilitySystemComponent();
+			if (!ASC) return;
+			
+			APTWWeaponActor* SpawnedWeapon = WeaponItemInstance->SpawnedWeapon1P;
+			if (!SpawnedWeapon) return;
+			
+			UPTWWeaponData* WeaponmData = SpawnedWeapon->GetWeaponData();
+			if (!WeaponmData) return;
+			
+			ASC->SetNumericAttributeBase(UPTWWeaponAttributeSet::GetMaxAmmoAttribute(), WeaponmData->MaxAmmo);
+			ASC->SetNumericAttributeBase(UPTWWeaponAttributeSet::GetDamageAttribute(), WeaponmData->BaseDamage);
+			ASC->SetNumericAttributeBase(UPTWWeaponAttributeSet::GetFireRateAttribute(), WeaponmData->FireRate);
+			
+			float FinalMaxAmmo = ASC->GetNumericAttribute(UPTWWeaponAttributeSet::GetMaxAmmoAttribute());
+			if (!WeaponItemInstance->bAlreadyUsing) // 처음 사용하는 경우
+			{
+				ASC->SetNumericAttributeBase(UPTWWeaponAttributeSet::GetCurrentAmmoAttribute(), FinalMaxAmmo);
+				const_cast<UPTWWeaponInstance*>(WeaponItemInstance)->bAlreadyUsing = true;
+			}
+			else // 해제했다가 다시 사용하는 경우
+			{
+				ASC->SetNumericAttributeBase(UPTWWeaponAttributeSet::GetCurrentAmmoAttribute(), WeaponItemInstance->CurrentAmmo);
+			}
+			
+			ASC->ForceReplication();
+		}
+	}
+}

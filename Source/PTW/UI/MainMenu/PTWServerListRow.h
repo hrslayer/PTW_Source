@@ -1,0 +1,54 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Blueprint/UserWidget.h"
+#include "OnlineSessionSettings.h"
+#include "PTWServerListRow.generated.h"
+
+class UTextBlock;
+class UButton;
+
+UCLASS()
+class PTW_API UPTWServerListRow : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	UFUNCTION(BlueprintCallable)
+	void SetupSessionMinimalInfo(const FOnlineSessionSearchResultBP& SearchResult);
+	
+	// FORCEINLINE UTextBlock* GetServerID() const { return ServerID; };
+	FORCEINLINE UTextBlock* GetServerName() const { return ServerName; };
+	
+protected:
+	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
+	
+	UFUNCTION()
+	void OnClickedJoinButton();
+	
+protected:
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UTextBlock> ServerName;
+	
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UTextBlock> RoundLimitType;
+	
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UTextBlock> ServerPlayers;
+	
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UTextBlock> ServerPing;
+	
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UButton> JoinButton;
+	
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UButton> ServerInfoButton;
+	
+protected:
+	// FPTWSessionConfig SessionConfig;
+	FOnlineSessionSearchResult SteamSessionInfo;
+};

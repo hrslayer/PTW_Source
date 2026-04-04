@@ -1,0 +1,235 @@
+﻿#pragma once
+
+#include "NativeGameplayTags.h"
+
+namespace GameplayTags
+{
+	namespace AbilityBlockTag
+	{
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Fire);
+	}
+	
+	namespace Ability
+	{
+		namespace CoolDown
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Banana);
+		}
+
+		namespace Action
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Emote);
+		}
+	}
+	
+
+	namespace Data
+	{
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Damage);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Duration);
+	}
+	
+	namespace Event
+	{
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Bomb_Explode);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Gimmick_Collect);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_ReloadReFill);
+		namespace Round
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Economy_Depression);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Economy_Inflation);
+		}
+		namespace Chaos
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(DwarfPotion);
+			
+		}
+		namespace Melee
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Hit);
+		}
+	}
+	
+	namespace MiniGame
+	{
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Bomb);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(CopsAndRobbers);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Delivery);
+
+		namespace State
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(IgnoreBatteryLevel);
+		}
+	}
+	
+	namespace Role
+	{
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Citizen);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cop);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Robber);
+	}
+	
+	namespace Input
+	{
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Crouch);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Equip);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Fire);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Jump);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Reload);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Sprint);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Drop);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Emote);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Interact);
+	}
+	
+	namespace State
+	{
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(HitReaction_HeadShot);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Posture_Crouching);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Dead);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Blind);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Status_Bomb);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Invincible);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Stasis);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Slowing);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Speed);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Stealth);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Charge);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Emoting);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Idle);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Bomb);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Stun);
+		
+		namespace Passive
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(ReflectShield);
+		}
+		
+		namespace Movement
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InAir);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Sprinting);
+		}
+		
+		namespace Ghost
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Invisible);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Revealed);
+		}
+		namespace Posture
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Crouching);
+		}
+
+		namespace Abyss
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(NoFire);
+		}
+	}
+	namespace Item
+	{
+		namespace Passive
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(ReflectShield);
+		}
+		
+	}
+	
+	namespace Weapon
+	{
+		namespace Anim
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Fire);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Reload);
+		}
+		namespace Gun
+		{
+			namespace Pistol
+			{
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pistol);
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(BombPistol);
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(AbyssPistol);
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(StunPistol);
+			}
+			namespace Rifle
+			{
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Rifle);
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(CopsRifle);
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(WaterGun);
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(RedLightSniper);
+			}
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Rocket);
+		}
+		namespace State
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Equip);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Reload);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UnEquip);
+		}
+
+		namespace EquipType
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Basic);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Special);
+		}
+		
+		namespace Melee
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Knife);
+		}
+	}
+	
+	namespace GameplayCue
+	{
+		namespace Weapon
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Explosion);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Fire);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(HitImpact);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Water);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Empty);
+		}
+		
+		namespace Item
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Invisibility);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Invincible);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Stealth);
+		}
+		namespace State
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Blind);
+		}
+		namespace Hit
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Wall);
+		}
+		namespace MiniGame
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Delivery);
+		}
+	}
+
+	namespace GameState
+	{
+		namespace MiniGame
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Bomb);
+		}
+	}
+	
+	namespace ChaosEvent
+	{
+		namespace Buff
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(MoveSpeed);
+		}
+
+		namespace Debuff
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(MoveSpeed);
+		}
+	}
+	
+}
+
