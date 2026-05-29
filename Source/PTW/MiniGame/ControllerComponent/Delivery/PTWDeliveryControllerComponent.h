@@ -9,6 +9,7 @@
 
 class UPTWDeliveryHUD;
 class UPTWBatterLevelWidget;
+class APostProcessVolume;
 
 UCLASS(Blueprintable, ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class PTW_API UPTWDeliveryControllerComponent : public UPTWBaseControllerComponent
@@ -47,6 +48,12 @@ protected:
 	
 	UFUNCTION()
 	void OnRep_CurrentRank(int32 OldRank);
+	
+	void UpdateVignette(float DeltaTime);
+	
+	void CheckAndPlayLowBatteryNotification();
+	
+	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 protected:
 	UPROPERTY(EditAnywhere)
@@ -55,6 +62,11 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TObjectPtr<UPTWDeliveryHUD> DeliveryHUDWidgetInstance;
 	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PostProcess")
+	TObjectPtr<APostProcessVolume> PostProcessComp;
+	
 	UPROPERTY()
 	float TraveledDistance = 0.0f;
+	
+	//Git Test
 };

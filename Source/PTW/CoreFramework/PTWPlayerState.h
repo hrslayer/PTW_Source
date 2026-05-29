@@ -4,9 +4,9 @@
 
 #include "CoreMinimal.h"
 #include "AbilitySystemInterface.h"
-#include "GameFramework/PlayerState.h"
+#include "ModularPlayerState.h"
 #include "PTWPlayerData.h"
-#include "PTWPlayerRoundDataInterface.h"
+#include "PTWPlayerDataInterface.h"
 #include "PTWPlayerState.generated.h"
 
 
@@ -23,7 +23,7 @@ class UPTWWeaponAttributeSet;
 class APTWShopNPC;
 
 UCLASS()
-class PTW_API APTWPlayerState : public APlayerState, public IAbilitySystemInterface, public IPTWPlayerRoundDataInterface
+class PTW_API APTWPlayerState : public AModularPlayerState, public IAbilitySystemInterface, public IPTWPlayerDataInterface
 {
 	GENERATED_BODY()
 	
@@ -32,6 +32,7 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 	UAttributeSet* GetAttributeSet() const { return AttributeSet; }
 	
@@ -49,6 +50,12 @@ protected:
 	
 	UFUNCTION()
 	void OnRep_LobbyItemData();
+	
+	UFUNCTION()
+	void OnRep_RoleData();
+	
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	
 public:
 	UFUNCTION(BlueprintCallable, Category = "Data")
 	void SetPlayerData(const FPTWPlayerData& NewData);
@@ -61,9 +68,14 @@ public:
 	FPTWPlayerRoundData GetPlayerRoundData() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Data")
+	void SetRoleData(const FPTWRoleData& NewData);
+	UFUNCTION(BlueprintPure, Category = "Data")
+	FPTWRoleData GetRoleData() const;
+	
+	UFUNCTION(BlueprintCallable, Category = "Data")
 	void SetLobbyItemData(const FPTWLobbyItemData& NewData);
 	FPTWLobbyItemData& GetLobbyItemData() {return LobbyItemData;}
-
+	
 	void SetMiniGameComponent(UActorComponent* NewMiniGameComponent);
 	FORCEINLINE UActorComponent* GetMiniGameComponent(){return MiniGameComponent;}
 	
@@ -76,6 +88,9 @@ public:
 
 	UFUNCTION(Client, Reliable)
 	void ClientPurchaseSuccess(APTWShopNPC* ShopNPC);
+
+	UFUNCTION(Server, Reliable)
+	void ServerVotePredictedPlayer(FUniqueNetIdRepl PredictedPlayer);
 
 	UPROPERTY(BlueprintAssignable, Category = "Events")
 	FOnPlayerDataChanged OnPlayerDataUpdated;
@@ -98,6 +113,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "GAS")
 	void ClearGAS();
 
+	// 서버에서 구매 성공 시, 해당 클라이언트에게 스팟을 기록하라고 명령
+	UFUNCTION(Client, Reliable)
+	void Client_AddDepletedSpot(class APTWShopSpot* Spot);
+
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "GAS")
 	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
@@ -115,6 +134,9 @@ protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_PlayerRoundData, VisibleAnywhere, BlueprintReadOnly, Category = "Data")
 	FPTWPlayerRoundData PlayerRoundData;
+
+	UPROPERTY(ReplicatedUsing = OnRep_RoleData, VisibleAnywhere, BlueprintReadOnly, Category = "Data")
+	FPTWRoleData RoleData;
 
 	UPROPERTY(ReplicatedUsing = OnRep_LobbyItemData, VisibleAnywhere, BlueprintReadOnly, Category = "Data")
 	FPTWLobbyItemData LobbyItemData;
@@ -140,10 +162,17 @@ public:
 	virtual void AddScore(int32 AddScore) override;
 	virtual void ResetRoundData() override;
 
+	virtual void VotePredictedPlayer(FUniqueNetIdRepl PredictedPlayer) override;
+	
 	UFUNCTION(BlueprintCallable)
 	void AddGold(int32 Amount);
 
 	void ResetInventoryItemId();
 
 	bool bIsReadyToPlay = false;
+	bool bWaitingForNextGame = false;
+	
+public:
+	UPROPERTY(BlueprintReadOnly)
+	TSet<TObjectPtr<APTWShopSpot>> LocalDepletedSpots;
 };

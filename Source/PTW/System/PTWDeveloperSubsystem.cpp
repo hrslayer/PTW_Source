@@ -9,7 +9,7 @@
 #include "CoreFramework/PTWDummyBotController.h"
 #include "CoreFramework/Game/GameMode/PTWGameMode.h"
 #include "CoreFramework/PTWPlayerState.h"
-#include "CoreFramework/Game/GameState/PTWGamestate.h"
+#include "CoreFramework/Game/GameState/PTWGameState.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "AIController.h"

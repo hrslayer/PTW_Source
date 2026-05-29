@@ -68,7 +68,7 @@ void APTWCARCitizen::InitAbilityActorInfo()
 	check(AbilitySystemComponent);
 	AbilitySystemComponent->InitAbilityActorInfo(this, this);
 	
-	AbilitySystemComponent->AddLooseGameplayTag(GameplayTags::Role::Citizen, 1, EGameplayTagReplicationState::TagOnly);
+	AbilitySystemComponent->AddLooseGameplayTag(GameplayTags::MiniGame::Role::Citizen, 1, EGameplayTagReplicationState::TagOnly);
 	UE_LOG(LogTemp, Log, TEXT("[%s] InitAbilityActorInfo Success - Owner: %s"),
 		HasAuthority() ? TEXT("SERVER") : TEXT("CLIENT"), *GetName());
 }

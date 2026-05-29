@@ -29,6 +29,10 @@ void UPTWMainMenu::NativeConstruct()
 	{
 		ExitButton->OnClicked.AddUniqueDynamic(this, &ThisClass::OnClickedExitButton);
 	}
+	if (CustomizationButton)
+	{
+		CustomizationButton->OnClicked.AddUniqueDynamic(this, &ThisClass::OnClickedCustomizationButton);
+	}
 
 	if (MaskingBorder)
 	{
@@ -61,6 +65,10 @@ void UPTWMainMenu::NativeDestruct()
 	{
 		OptionsButton->OnClicked.RemoveDynamic(this, &ThisClass::OnClickedOptionsButton);
 	}
+	if (CustomizationButton)
+	{
+		CustomizationButton->OnClicked.RemoveDynamic(this, &ThisClass::OnClickedCustomizationButton);
+	}
 	
 	Super::NativeDestruct();
 }
@@ -85,7 +93,7 @@ void UPTWMainMenu::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 
 void UPTWMainMenu::OnClickedPlayButton()
 {
-#if WITH_EDITOR
+#if WITH_EDITOR || true
 	if (IsValid(ServerBrowserClass))
 	{
 		if (ULocalPlayer* LP = GetOwningLocalPlayer())
@@ -137,5 +145,20 @@ void UPTWMainMenu::ToggleMainMenu(bool bIsMenuOpen)
 	else
 	{
 		TargetHeight = MinHeight;
+	}
+}
+
+void UPTWMainMenu::OnClickedCustomizationButton()
+{
+	if (ULocalPlayer* LP = GetOwningLocalPlayer())
+	{
+		if (UPTWUISubsystem* UISubsystem = LP->GetSubsystem<UPTWUISubsystem>())
+		{
+			if (CustomizationMenuClass)
+			{
+				UISubsystem->HideSystemWidget(GetClass());
+				UISubsystem->PushWidget(CustomizationMenuClass, EUIInputPolicy::UIOnly);
+			}
+		}
 	}
 }

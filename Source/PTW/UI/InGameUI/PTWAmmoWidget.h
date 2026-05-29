@@ -9,6 +9,7 @@
 
 class UTextBlock;
 class UAbilitySystemComponent;
+class UProgressBar;
 
 /**
  * 
@@ -33,13 +34,24 @@ protected:
 	// 현재 탄창 내 탄약 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> CurrentAmmoText;
+	// 슬래시 텍스트
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UTextBlock> SlashText;
 	// 보유 중인 전체 여분 탄약 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> MaxAmmoText;
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UProgressBar> AmmoProgressBar;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "AmmoWidget|Style")
+	FSlateColor OverheatedColor = FLinearColor::Red;
 
 private:
 	/* 델리게이트 연결 */
 	void BindGASDelegates(UAbilitySystemComponent* ASC);
+	/* 델리게이트 해제 */
+	void UnBindGASDelegates();
+
 	/* 델리게이트 : 현재탄약 변경 감지 */
 	void OnCurrentAmmoAttributeChanged(const FOnAttributeChangeData& Data);
 	/* 델리게이트 : 최대탄약 변경 감지 */
@@ -48,9 +60,16 @@ private:
 	void UpdateAmmoWidget(float CurrentAmmo, float ReserveAmmo);
 	/* 탄약 위젯 가시여부 */
 	void SetAmmoWidgetVisibility(const FGameplayTag Tag, int32 NewCount);
+	/* 델리게이트 : 과열 태그 변경 감지 */
+	void OnOverheatTagChanged(const FGameplayTag Tag, int32 NewCount);
 
 	/* Delegate Handles (unbind 필요) */
 	FDelegateHandle CurrentAmmoChangedHandle;
 	FDelegateHandle MaxAmmoChangedHandle;
 	FDelegateHandle EquipWeaponHandle;
+	FDelegateHandle OverheatTagChangedHandle;
+
+	FSlateColor OriginalTextColor;
+
+	FGameplayTag OverheatTag;
 };

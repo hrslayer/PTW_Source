@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "ActiveGameplayEffectHandle.h"
 #include "GameplayAbilitySpecHandle.h"
-#include "MiniGame/Data/PTWChaosItemDefinition.h"
+#include "Event/PTWChaosItemDefinition.h"
 #include "UObject/Object.h"
 #include "PTWChaosEventApply.generated.h"
 
@@ -26,7 +26,7 @@ public:
 	void SetStackCount(int32 Count);
 	
 	virtual void ApplyChaosEvent(APTWGameState* GameState);
-	virtual void ChaosEventEnd();
+	virtual void ChaosEventEnd(APTWGameState* GameState);
 	
 	
 protected:
@@ -40,8 +40,16 @@ protected:
 	TMap<UAbilitySystemComponent*, FGameplayAbilitySpecHandle> ApplyAbilityHandles;
 	
 private:
+	
+	// 카오스 이벤트 GA
 	void ApplyChaosAbilityClass(APTWGameState* GameState);
 	void ChaosAbilityEnd();
-	
-	
+
+	// 카오스 이벤트 날씨
+	void ApplyChaosWeather(APTWGameState* GameState);
+	void ChaosWeatherEnd(APTWGameState* GameState);
+	//AActor* FindSkyActor();
+
+	UPROPERTY()
+	TObjectPtr<UObject> PreviousWeather;
 };

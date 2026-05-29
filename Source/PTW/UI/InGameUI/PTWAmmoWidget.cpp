@@ -3,6 +3,7 @@
 
 #include "UI/InGameUI/PTWAmmoWidget.h"
 #include "Components/TextBlock.h"
+#include "Components/ProgressBar.h"
 #include "AbilitySystemComponent.h" // ASC
 #include "GAS/PTWWeaponAttributeSet.h" 
 #include "GameplayTagContainer.h"
@@ -12,6 +13,11 @@ void UPTWAmmoWidget::InitWithASC(UAbilitySystemComponent* ASC)
 {
 	if (!ASC) return;
 
+	if (AbilitySystemComponent)
+	{
+		UnBindGASDelegates();
+	}
+
 	AbilitySystemComponent = ASC;
 
 	BindGASDelegates(ASC);
@@ -20,43 +26,34 @@ void UPTWAmmoWidget::InitWithASC(UAbilitySystemComponent* ASC)
 	float CurrentAmmo = ASC->GetNumericAttribute(UPTWWeaponAttributeSet::GetCurrentAmmoAttribute());
 	float MaxAmmo = ASC->GetNumericAttribute(UPTWWeaponAttributeSet::GetMaxAmmoAttribute());
 
+	OnOverheatTagChanged(OverheatTag, ASC->GetTagCount(OverheatTag));
+
 	UpdateAmmoWidget(CurrentAmmo, MaxAmmo);
-	SetVisibility(ESlateVisibility::Hidden);
+
+	const int32 TagCount = ASC->GetTagCount(FGameplayTag::RequestGameplayTag(FName("Weapon.State.Equip")));
+	SetAmmoWidgetVisibility(FGameplayTag(), TagCount);
 }
 
 void UPTWAmmoWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	if (CurrentAmmoText) OriginalTextColor = CurrentAmmoText->GetColorAndOpacity();
+
+	OverheatTag = FGameplayTag::RequestGameplayTag(FName("Weapon.State.Overheated"));
 }
 
 void UPTWAmmoWidget::NativeDestruct()
 {
-	/* 델리게이트 Unbind (UI 파괴될 때 크래시 방지) */
-	if (AbilitySystemComponent)
-	{
-		AbilitySystemComponent
-			->GetGameplayAttributeValueChangeDelegate(UPTWWeaponAttributeSet::GetCurrentAmmoAttribute())
-			.Remove(CurrentAmmoChangedHandle);
-
-		AbilitySystemComponent
-			->GetGameplayAttributeValueChangeDelegate(UPTWWeaponAttributeSet::GetMaxAmmoAttribute())
-			.Remove(MaxAmmoChangedHandle);
-
-		if (EquipWeaponHandle.IsValid())
-		{
-			AbilitySystemComponent
-				->RegisterGameplayTagEvent(FGameplayTag::RequestGameplayTag(TEXT("Weapon.State.Equip")), EGameplayTagEventType::NewOrRemoved)
-				.Remove(EquipWeaponHandle);
-
-			EquipWeaponHandle.Reset();
-		}
-	}
+	UnBindGASDelegates();
 
 	Super::NativeDestruct();
 }
 
 void UPTWAmmoWidget::BindGASDelegates(UAbilitySystemComponent* ASC)
 {
+	if (!ASC) return;
+
 	/* CurrentAmmo 변경 감지 */
 	CurrentAmmoChangedHandle =
 		ASC->GetGameplayAttributeValueChangeDelegate(UPTWWeaponAttributeSet::GetCurrentAmmoAttribute())
@@ -71,6 +68,49 @@ void UPTWAmmoWidget::BindGASDelegates(UAbilitySystemComponent* ASC)
 	EquipWeaponHandle =
 		ASC->RegisterGameplayTagEvent(FGameplayTag::RequestGameplayTag(FName("Weapon.State.Equip")), EGameplayTagEventType::NewOrRemoved)
 		.AddUObject(this, &UPTWAmmoWidget::SetAmmoWidgetVisibility);
+
+	/* 과열 태그 여부 감지 */
+	OverheatTagChangedHandle = ASC->RegisterGameplayTagEvent(OverheatTag, EGameplayTagEventType::NewOrRemoved)
+		.AddUObject(this, &UPTWAmmoWidget::OnOverheatTagChanged);
+}
+
+void UPTWAmmoWidget::UnBindGASDelegates()
+{
+	if (AbilitySystemComponent)
+	{
+		// Attribute 델리게이트 해제
+		if (CurrentAmmoChangedHandle.IsValid())
+		{
+			AbilitySystemComponent
+				->GetGameplayAttributeValueChangeDelegate(UPTWWeaponAttributeSet::GetCurrentAmmoAttribute())
+				.Remove(CurrentAmmoChangedHandle);
+			CurrentAmmoChangedHandle.Reset();
+		}
+
+		if (MaxAmmoChangedHandle.IsValid())
+		{
+			AbilitySystemComponent
+				->GetGameplayAttributeValueChangeDelegate(UPTWWeaponAttributeSet::GetMaxAmmoAttribute())
+				.Remove(MaxAmmoChangedHandle);
+			MaxAmmoChangedHandle.Reset();
+		}
+
+		// Tag Event 델리게이트 해제
+		if (EquipWeaponHandle.IsValid())
+		{
+			AbilitySystemComponent
+				->RegisterGameplayTagEvent(FGameplayTag::RequestGameplayTag(FName("Weapon.State.Equip")), EGameplayTagEventType::NewOrRemoved)
+				.Remove(EquipWeaponHandle);
+			EquipWeaponHandle.Reset();
+		}
+
+		if (OverheatTagChangedHandle.IsValid())
+		{
+			AbilitySystemComponent->RegisterGameplayTagEvent(OverheatTag, EGameplayTagEventType::NewOrRemoved)
+				.Remove(OverheatTagChangedHandle);
+			OverheatTagChangedHandle.Reset();
+		}
+	}
 }
 
 void UPTWAmmoWidget::OnCurrentAmmoAttributeChanged(const FOnAttributeChangeData& Data)
@@ -101,10 +141,36 @@ void UPTWAmmoWidget::UpdateAmmoWidget(float CurrentAmmo, float MaxAmmo)
 
 	if (MaxAmmoText)
 		MaxAmmoText->SetText(FText::AsNumber(FMath::RoundToInt(MaxAmmo)));
+
+	if (AmmoProgressBar)
+	{
+		// 0으로 나누기 방지 (MaxAmmo가 0일 경우 게이지를 0으로 설정)
+		float Percent = (MaxAmmo > 0.0f) ? (CurrentAmmo / MaxAmmo) : 0.0f;
+
+		AmmoProgressBar->SetPercent(FMath::Clamp(Percent, 0.0f, 1.0f));
+	}
 }
 
 void UPTWAmmoWidget::SetAmmoWidgetVisibility(const FGameplayTag Tag, int32 NewCount)
 {
 	const bool bEquipped = (NewCount > 0);
 	SetVisibility(bEquipped ? ESlateVisibility::Visible : ESlateVisibility::Hidden);
+}
+
+void UPTWAmmoWidget::OnOverheatTagChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	const bool bIsOverheated = NewCount > 0;
+
+	if (bIsOverheated)
+	{
+		if (CurrentAmmoText) CurrentAmmoText->SetColorAndOpacity(OverheatedColor);
+		if (SlashText)       SlashText->SetColorAndOpacity(OverheatedColor);
+		if (MaxAmmoText)     MaxAmmoText->SetColorAndOpacity(OverheatedColor);
+	}
+	else
+	{
+		if (CurrentAmmoText) CurrentAmmoText->SetColorAndOpacity(OriginalTextColor);
+		if (SlashText)       SlashText->SetColorAndOpacity(OriginalTextColor);
+		if (MaxAmmoText)     MaxAmmoText->SetColorAndOpacity(OriginalTextColor);
+	}
 }

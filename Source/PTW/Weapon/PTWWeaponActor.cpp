@@ -122,14 +122,14 @@ void APTWWeaponActor::OnRep_IsFirstPersonWeapon()
 }
 
 
-float APTWWeaponActor::PlayWeaponMontage(UAnimMontage* MontageToPlay)
+float APTWWeaponActor::PlayWeaponMontage(UAnimMontage* MontageToPlay, float PlayRate)
 {
 	if (WeaponMesh && MontageToPlay)
 	{
 		UAnimInstance* AnimInstance = WeaponMesh->GetAnimInstance();
 		if (AnimInstance)
 		{
-			return AnimInstance->Montage_Play(MontageToPlay);
+			return AnimInstance->Montage_Play(MontageToPlay, PlayRate);
 		}
 	}
 	return 0.0f;

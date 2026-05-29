@@ -26,7 +26,7 @@ public:
 	void Server_CallHandleRespawn();
 
 	UFUNCTION(Client, Reliable)
-	void Client_ShowDraftUI(const TArray<FName>& RowId);
+	void Client_ShowDraftUI();
 
 	UFUNCTION(Client, Reliable)
 	void Client_HideDraftUI();

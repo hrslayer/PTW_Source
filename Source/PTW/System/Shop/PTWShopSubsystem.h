@@ -14,6 +14,7 @@
 
 class APTWShopNPC;
 class APTWShopSpot;
+class APTWPlayerState;
 
 UCLASS()
 class PTW_API UPTWShopSubsystem : public UWorldSubsystem
@@ -40,12 +41,30 @@ public:
 
 	const FShopItemRow* GetShopItemData(FName ItemID) const;
 
+	UFUNCTION(BlueprintPure, Category = "Shop|Event")
+	bool CanAffordItem(APTWPlayerState* BuyerPS, int32 Price) const;
+
+	/* 아이템 실제 구매 처리 시 호출되어야 함 */
+	UFUNCTION(BlueprintCallable, Category = "Shop|Event")
+	bool TryPurchaseItem(APTWPlayerState* BuyerPS, APTWShopNPC* TargetNPC, FName ItemID);
+
+	/* [크라우드 펀딩] 모금하기 */
+	UFUNCTION(BlueprintCallable, Category = "Shop|Event")
+	void AddCrowdFunding(int32 Amount, APTWPlayerState* Donator);
+
 protected:
 	TArray<EShopCategory> SelectShopCategories(int32 TargetCount);
 	TArray<FName> SelectItemsForShop(EShopCategory Category, FGameplayTag BanTag);
 
 	//현재 이벤트 태그에 따른 가격 배율 계산 (0.5 ~ 2.0)
 	float GetPriceMultiplier() const;
+
+	// [바겐세일] 10초마다 상점 아이템 셔플
+	void ReShuffleShops();
+
+	void OnCrowdFundingFailed();
+
+	FGameplayTag GetCurrentRoundEventTag() const;
 
 protected:
 	UPROPERTY()
@@ -62,6 +81,20 @@ protected:
 	UPROPERTY()
 	TSubclassOf<APTWShopNPC> ShopNPCClass;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop State")
-	FGameplayTag CurrentRoundEventTag;
+	/*UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Shop State")
+	FGameplayTag CurrentRoundEventTag;*/
+
+	UPROPERTY()
+	TMap<TObjectPtr<APTWShopNPC>, int32> ShopPurchaseCounts;
+
+	FTimerHandle FlashSaleTimerHandle;
+	FTimerHandle CrowdFundingTimerHandle;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop|Event")
+	int32 CurrentCrowdFundingAmount = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Shop|Event")
+	bool bIsShopOpenedByFunding = false;
+
+	TMap<FName, int32> GlobalItemStock;
 };

@@ -1,12 +1,9 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
-
-
-#include "PTWServerListRow.h"
+﻿#include "PTWServerListRow.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "PTW/System/PTWSteamSessionSubsystem.h"
-#include "System/PTWGameLiftClientSubsystem.h"
-#include "System/Session/PTWSessionConfig.h"
+#include "System/Server/PTWServerSettings.h"
+
 
 void UPTWServerListRow::SetupSessionMinimalInfo(const FOnlineSessionSearchResultBP& SearchResult)
 {
@@ -15,36 +12,29 @@ void UPTWServerListRow::SetupSessionMinimalInfo(const FOnlineSessionSearchResult
 	
 	// 위젯 설정
 	// 서버 이름 설정
-	FString ServerNameStr;
-	if (OnlineSession.SessionSettings.Get(FName(PTWSessionKey::ServerName), ServerNameStr))
+	FString ServerNameString;
+	if (OnlineSession.SessionSettings.Get(FPTWServerSettings::Key_ServerName, ServerNameString))
 	{
-		ServerName->SetText(FText::FromString(ServerNameStr));
+		ServerName->SetText(FText::FromString(ServerNameString));
 	}
 	
 	// 라운드 유형 설정
-	int32 RoundLimitTypeInt32;
-	if (OnlineSession.SessionSettings.Get(FName(PTWSessionKey::MaxRounds), RoundLimitTypeInt32))
+	FString RoundTypeString;
+	if (OnlineSession.SessionSettings.Get(FPTWServerSettings::Key_RoundType, RoundTypeString))
 	{
-		if (RoundLimitTypeInt32 == GetMaxRoundsByLimit(EPTWRoundLimit::Short))
-		{
-			RoundLimitType->SetText(FText::FromString(TEXT("Short")));
-		}
-		else
-		{
-			RoundLimitType->SetText(FText::FromString(TEXT("Long")));
-		}
+		RoundLimitType->SetText(FText::FromString(RoundTypeString));
 	}
 	
 	// 플레이어 수 설정
 	int32 OpenSlots = OnlineSession.NumOpenPublicConnections;
 	int32 MaxPlayers = OnlineSession.SessionSettings.NumPublicConnections;
 	
-	FString ServerPlayersStr = FString::Printf(TEXT("%d / %d"), 
+	const FString PlayerCount = FString::Printf(TEXT("%d / %d"), 
 		MaxPlayers - OpenSlots, MaxPlayers);
-	ServerPlayers->SetText(FText::FromString(ServerPlayersStr));
+	ServerPlayers->SetText(FText::FromString(PlayerCount));
 	
 	// 핑 설정
-	FString ServerPingStr = FString::Printf((TEXT("%dms")), SteamSessionInfo.PingInMs);
+	const FString ServerPingStr = FString::Printf((TEXT("%dms")), SteamSessionInfo.PingInMs);
 	ServerPing->SetText(FText::FromString(ServerPingStr));
 }
 
@@ -70,35 +60,11 @@ void UPTWServerListRow::NativeDestruct()
 
 void UPTWServerListRow::OnClickedJoinButton()
 {
-	UGameInstance* GameInstance = GetGameInstance();
-	if (!IsValid(GameInstance)) return;
-	
-	const FOnlineSession& OnlineSession = SteamSessionInfo.Session;
-	bool bIsNoGameLift = false;
 	FOnlineSessionSearchResultBP SteamSessionInfoBP = FOnlineSessionSearchResultBP(SteamSessionInfo);
-	
-	OnlineSession.SessionSettings.Get(FName(PTWSessionKey::NoGameLift), bIsNoGameLift);
-	
-	if (!OnlineSession.SessionSettings.bIsDedicated || bIsNoGameLift)
+
+	// 리슨 서버 접속
+	if (UPTWSteamSessionSubsystem* SteamSessionSubsystem = UPTWSteamSessionSubsystem::Get(this))
 	{
-		// 리슨 서버 접속
-		if (UPTWSteamSessionSubsystem* SteamSessionSubsystem = UPTWSteamSessionSubsystem::Get(this))
-		{
-			SteamSessionSubsystem->JoinGameSession(SteamSessionInfoBP);
-		}
-	}
-	else
-	{
-		// 데디케이티드 서버 접속
-		// FString GameLiftSessionId;
-		// OnlineSession.SessionSettings.Get(PTWSessionKey::GameLiftSessionId, GameLiftSessionId);
-		//
-		// if (GameLiftSessionId.IsEmpty()) return;
-		//
-		// if (UPTWGameLiftClientSubsystem* GameLiftClientSubsystem = UPTWGameLiftClientSubsystem::Get(this))
-		// {
-		// 	const FString UniquePlayerId = GameLiftClientSubsystem->GetUniquePlayerId();
-		// 	GameLiftClientSubsystem->CreatePlayerSession(UniquePlayerId, GameLiftSessionId);
-		// }
+		SteamSessionSubsystem->JoinGameSession(SteamSessionInfoBP);
 	}
 }

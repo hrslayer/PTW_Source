@@ -21,54 +21,51 @@ UPTWGA_Reload::UPTWGA_Reload()
 	ActivationOwnedTags.AddTag(GameplayTags::Weapon::State::Reload);
 }
 
-void UPTWGA_Reload::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
-                                    const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
+void UPTWGA_Reload::ActivateAbility(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayAbilityActivationInfo ActivationInfo,
+	const FGameplayEventData* TriggerEventData)
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
-
-	UE_LOG(LogTemp, Warning, TEXT("Super::ActivateAbility 호출 완료"));
 	
 	APTWPlayerCharacter* PC = Cast<APTWPlayerCharacter>(GetAvatarActorFromActorInfo());
-	UAnimMontage* MontageToPlay = GetReloadMontage(PC);
-
-	if (!PC || !MontageToPlay || !CommitAbility(Handle, ActorInfo, ActivationInfo))
+	if (!PC)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("PC, MontagePlay, CommitAbility 중 오류 발생으로 Return"));
-		
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
-	
-	UAbilityTask_PlayMontageAndWait* MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
-		this, NAME_None, MontageToPlay, 1.0f, NAME_None, false);
-	
-	if (MontageTask)
-	{
-		MontageTask->OnBlendOut.AddDynamic(this, &ThisClass::OnMontageCompleted);
-		MontageTask->OnCompleted.AddDynamic(this, &ThisClass::OnMontageCompleted);
-		MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::OnMontageCancelled);
-		MontageTask->OnCancelled.AddDynamic(this, &ThisClass::OnMontageCancelled);
-		MontageTask->ReadyForActivation();
-		
-		UE_LOG(LogTemp, Warning, TEXT("몽타주 이벤트 등록 완료"));
-	}
-	
+
+	UAnimMontage* MontageToPlay = GetReloadMontage(PC);
 	if (!MontageToPlay)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("MontageToPlay Null!"));
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return;
+	}
+
+	if (!CheckAmmo(PC))
+	{
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
 
 	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("CommitAbility Failed"));
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
 
+	float ReloadPlayRate = 1.0f;
+
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	if (ASC && ASC->HasMatchingGameplayTag(GameplayTags::Item::Passive::CombatManual))
+	{
+		ReloadPlayRate = 1.5f;
+	}
+
 	FGameplayTag EventTag = GameplayTags::Event::Weapon_ReloadReFill;
-	UAbilityTask_WaitGameplayEvent* WaitEventTask = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, EventTag);
+	UAbilityTask_WaitGameplayEvent* WaitEventTask =
+		UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, EventTag);
 
 	if (WaitEventTask)
 	{
@@ -76,10 +73,28 @@ void UPTWGA_Reload::ActivateAbility(const FGameplayAbilitySpecHandle Handle, con
 		WaitEventTask->ReadyForActivation();
 	}
 
+	UAbilityTask_PlayMontageAndWait* MontageTask =
+		UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
+			this,
+			NAME_None,
+			MontageToPlay,
+			ReloadPlayRate,
+			NAME_None,
+			false);
+
+	if (MontageTask)
+	{
+		MontageTask->OnBlendOut.AddDynamic(this, &ThisClass::OnMontageCompleted);
+		MontageTask->OnCompleted.AddDynamic(this, &ThisClass::OnMontageCompleted);
+		MontageTask->OnInterrupted.AddDynamic(this, &ThisClass::OnMontageCancelled);
+		MontageTask->OnCancelled.AddDynamic(this, &ThisClass::OnMontageCancelled);
+		MontageTask->ReadyForActivation();
+	}
+
 	if (UPTWWeaponComponent* WeaponComp = PC->GetWeaponComponent())
 	{
-		WeaponComp->PlayMontage1P(MontageToPlay);
-		WeaponComp->PlayWeaponMontageByTag(ReloadAnimTag);
+		WeaponComp->PlayMontage1P(MontageToPlay, ReloadPlayRate);
+		WeaponComp->PlayWeaponMontageByTag(ReloadAnimTag, ReloadPlayRate);
 	}
 }
 
@@ -92,8 +107,6 @@ UAnimMontage* UPTWGA_Reload::GetReloadMontage(APTWPlayerCharacter* PC) const
 
 	UPTWWeaponInstance* CurrentItem = Inven->GetCurrentWeaponInst<UPTWWeaponInstance>();
 	if (!CurrentItem) return nullptr;
-	
-	UE_LOG(LogTemp, Warning, TEXT("Inven, PC, CurrentItem 모두 통과"));
 
 	UPTWWeaponData* WData = CurrentItem->GetWeaponData();
 	if (WData && WData->AnimMap.Contains(ReloadAnimTag))
@@ -114,6 +127,22 @@ void UPTWGA_Reload::OnGameplayEventReceived(FGameplayEventData Payload)
 			ApplyGameplayEffectSpecToOwner(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), SpecHandle);
 		}
 	}
+}
+
+bool UPTWGA_Reload::CheckAmmo(APTWPlayerCharacter* PC)
+{
+	UPTWInventoryComponent* Inven = PC->GetInventoryComponent();
+	if (!Inven) return false;
+	
+	UPTWWeaponInstance* CurWeaponInstance = Inven->GetCurrentWeaponInst<UPTWWeaponInstance>();
+	if (!CurWeaponInstance) return false;
+	
+	if (CurWeaponInstance->GetCurrentAmmo() == CurWeaponInstance->GetMaxAmmo())
+	{
+		return false;
+	}
+	
+	return true;
 }
 
 void UPTWGA_Reload::OnMontageCompleted()

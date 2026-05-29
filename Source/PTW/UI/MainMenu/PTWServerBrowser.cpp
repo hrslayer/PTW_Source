@@ -1,8 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
-#include "PTWServerBrowser.h"
-
+﻿#include "PTWServerBrowser.h"
 #include "PTWMainMenu.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
@@ -15,7 +11,7 @@
 #include "PTW/UI/MainMenu/PTWServerListRow.h"
 #include "PTW/System/PTWSteamSessionSubsystem.h"
 #include "System/PTWGameLiftClientSubsystem.h"
-#include "System/Session/PTWSessionConfig.h"
+#include "System/Server/PTWServerSettings.h"
 #include "UI/PTWUISubsystem.h"
 
 #define LOCTEXT_NAMESPACE "ServerBrowser"
@@ -23,7 +19,7 @@ void UPTWServerBrowser::NativeConstruct()
 {
 	Super::NativeConstruct();
 	
-	RoundLimit = EPTWRoundLimit::Short;
+	RoundLimit = EPTWRoundType::Short;
 	
 	if (!IsValid(ServerListRowClass))
 	{
@@ -32,38 +28,38 @@ void UPTWServerBrowser::NativeConstruct()
 	
 	if (IsValid(BackButton))
 	{
-		BackButton->OnClicked.AddUniqueDynamic(this, &ThisClass::OnClickedBackButton);	
+		BackButton->OnClicked.AddUniqueDynamic(this, &ThisClass::OnClickedBack);	
 	}
 	
 	if (IsValid(ServerMenuButton))
 	{
-		ServerMenuButton->OnClicked.AddUniqueDynamic(this, &ThisClass::OnClickedServerMenuButton);
+		ServerMenuButton->OnClicked.AddUniqueDynamic(this, &ThisClass::OnClickedServerMenu);
 	}
 	
 	if (IsValid(CreateServerButton))
 	{
-		CreateServerButton->OnClicked.AddUniqueDynamic(this, &ThisClass::OnClickedCreateServerButton);
+		CreateServerButton->OnClicked.AddUniqueDynamic(this, &ThisClass::OnClickedCreateServer);
 	}
 	
 	if (IsValid(FindServerButton))
 	{
-		FindServerButton->OnClicked.AddUniqueDynamic(this, &ThisClass::OnClickedFindServerButton);
+		FindServerButton->OnClicked.AddUniqueDynamic(this, &ThisClass::OnClickedFindServer);
 	}
 	
 	if (IsValid(QuickMatchButton))
 	{
-		QuickMatchButton->OnClicked.AddUniqueDynamic(this, &ThisClass::OnClickedQuickMatchButton);
+		QuickMatchButton->OnClicked.AddUniqueDynamic(this, &ThisClass::OnClickedQuickMatch);
 	}
 	
 	if (IsValid(ShortRoundButton))
 	{
-		ShortRoundButton->OnClicked.AddUniqueDynamic(this, &ThisClass::OnClickedShortRoundButton);
-		OnClickedShortRoundButton();
+		ShortRoundButton->OnClicked.AddUniqueDynamic(this, &ThisClass::OnClickedShortRound);
+		OnClickedShortRound();
 	}
 	
 	if (IsValid(LongRoundButton))
 	{
-		LongRoundButton->OnClicked.AddUniqueDynamic(this, &ThisClass::OnClickedLongRoundButton);
+		LongRoundButton->OnClicked.AddUniqueDynamic(this, &ThisClass::OnClickedLongRound);
 	}
 	
 	if (IsValid(DevJoinButton))
@@ -108,9 +104,6 @@ void UPTWServerBrowser::NativeConstruct()
 	{
 		ServerMenuBorder->SetVisibility(ESlateVisibility::Collapsed);
 	}
-	
-	ServerMenuButton->SetVisibility(ESlateVisibility::Collapsed);
-	FindServerButton->SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UPTWServerBrowser::NativeDestruct()
@@ -118,7 +111,7 @@ void UPTWServerBrowser::NativeDestruct()
 	Super::NativeDestruct();
 }
 
-void UPTWServerBrowser::OnClickedBackButton()
+void UPTWServerBrowser::OnClickedBack()
 {
 	if (IsValid(MainMenuClass))
 	{
@@ -133,7 +126,7 @@ void UPTWServerBrowser::OnClickedBackButton()
 	}
 }
 
-void UPTWServerBrowser::OnClickedServerMenuButton()
+void UPTWServerBrowser::OnClickedServerMenu()
 {
 	if (!IsValid(ServerMenuBorder)) return;
 	
@@ -149,48 +142,36 @@ void UPTWServerBrowser::OnClickedServerMenuButton()
 	}
 }
 
-void UPTWServerBrowser::OnClickedCreateServerButton()
+void UPTWServerBrowser::OnClickedCreateServer()
 {
 	UGameInstance* GameInstance = GetGameInstance();
 	if (!IsValid(GameInstance)) return;
 	
 	SetIsEnabled(false);
 	
-	FPTWSessionConfig SessionConfig;
+	
+	FString ServerName = TEXT("");
+	int32 MaxPlayerCount = 0;
+	
 	if (IsValid(ServerNameEditableText))
 	{
-		SessionConfig.ServerName = ServerNameEditableText->GetText().ToString();
+		ServerName = ServerNameEditableText->GetText().ToString();
 		
 	}
 	if (IsValid(ServerMaxPlayerEditableText))
 	{
-		SessionConfig.MaxPlayers = FCString::Atoi(*ServerMaxPlayerEditableText->GetText().ToString());
+		MaxPlayerCount = FCString::Atoi(*ServerMaxPlayerEditableText->GetText().ToString());
 	}
-	if (IsValid(ServerMaxPlayerEditableText))
+
+	FPTWServerSettings ServerSettings(ServerName, MaxPlayerCount, EPTWRoundType::Short, EPTWServerType::Custom, false);
+	// 리슨서버로 세션 생성
+	if (UPTWSteamSessionSubsystem* SteamSessionSubsystem = UPTWSteamSessionSubsystem::Get(this))
 	{
-		SessionConfig.MaxRounds = GetMaxRoundsByLimit(RoundLimit);
-	}
-	SessionConfig.bIsDedicatedServer = DedicatedCheckBox->IsChecked();
-	
-	if (!SessionConfig.bIsDedicatedServer)
-	{
-		// 리슨서버로 세션 생성
-		if (UPTWSteamSessionSubsystem* SteamSessionSubsystem = UPTWSteamSessionSubsystem::Get(this))
-		{
-			SteamSessionSubsystem->CreateGameSession(SessionConfig, true);
-		}
-	}
-	else
-	{
-		// 데디서버로 원격 세션 생성
-		if (UPTWGameLiftClientSubsystem* GameLiftClientSubsystem = UPTWGameLiftClientSubsystem::Get(this))
-		{
-			GameLiftClientSubsystem->CreateGameSession(SessionConfig);
-		}
+		SteamSessionSubsystem->CreateGameSession(ServerSettings);
 	}
 }
 
-void UPTWServerBrowser::OnClickedFindServerButton()
+void UPTWServerBrowser::OnClickedFindServer()
 {
 	SetIsEnabled(false);
 	ServerListVerticalBox->ClearChildren();
@@ -203,26 +184,25 @@ void UPTWServerBrowser::OnClickedFindServerButton()
 	}
 }
 
-void UPTWServerBrowser::OnClickedQuickMatchButton()
+void UPTWServerBrowser::OnClickedQuickMatch()
 {
 	if (UPTWGameLiftClientSubsystem* GameLiftClientSubsystem = UPTWGameLiftClientSubsystem::Get(this))
 	{
-		GameLiftClientSubsystem->SearchQuickSession();
-		SetIsEnabled(false);
+		GameLiftClientSubsystem->StartMatchmaking();
 	}
 }
 
-void UPTWServerBrowser::OnClickedShortRoundButton()
+void UPTWServerBrowser::OnClickedShortRound()
 {
-	RoundLimit = EPTWRoundLimit::Short;
+	RoundLimit = EPTWRoundType::Short;
 	
 	ShortRoundButton->SetBackgroundColor(FLinearColor::Green);
 	LongRoundButton->SetBackgroundColor(FLinearColor::White);
 }
 
-void UPTWServerBrowser::OnClickedLongRoundButton()
+void UPTWServerBrowser::OnClickedLongRound()
 {
-	RoundLimit = EPTWRoundLimit::Long;
+	RoundLimit = EPTWRoundType::Long;
 	
 	LongRoundButton->SetBackgroundColor(FLinearColor::Green);
 	ShortRoundButton->SetBackgroundColor(FLinearColor::White);

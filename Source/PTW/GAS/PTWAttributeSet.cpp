@@ -120,23 +120,37 @@ void UPTWAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallbac
 			if (RemainingDamage > 0.0f)
 			{
 				const float NewHealth = FMath::Clamp(CurrentHealth - RemainingDamage, 0.0f, GetMaxHealth());
+				const float ActualHealthLost = CurrentHealth - NewHealth;
+				
 				SetHealth(NewHealth);
-
+				
 				UAbilitySystemComponent* SourceASC = Data.EffectSpec.GetContext().GetOriginalInstigatorAbilitySystemComponent();
 				UAbilitySystemComponent* TargetASC = GetOwningAbilitySystemComponent();
-
-				UE_LOG(Log_AbilityBattle, Warning, TEXT("SourceASC: %p"), SourceASC);
-				UE_LOG(Log_AbilityBattle, Warning, TEXT("TargetASC: %p"), TargetASC);
 				
-				OnDamageApplied.Broadcast(TargetASC, SourceASC, RemainingDamage);
+				OnDamageApplied.Broadcast(TargetASC, SourceASC, ActualHealthLost);
 			}
 			
+			OnHit.Broadcast();
 			
 			if (GetHealth() <= 0.0f)
 			{
 				if (!TargetChar->IsDead())
 				{
-					TargetChar->HandleDeath(SourceActor);
+					AActor* FinalKiller = SourceActor;
+					
+					APTWPlayerState* SourcePS = Cast<APTWPlayerState>(FinalKiller);
+					if (SourceActor == nullptr || TargetChar == SourcePS->GetPawn())
+					{
+						APTWPlayerCharacter* PTWChar = Cast<APTWPlayerCharacter>(TargetChar);
+						
+						if (AActor* LastAttacker = PTWChar->GetAttacker())
+						{
+							FinalKiller = LastAttacker;
+							//BroadCast
+							OnKillApplied.Broadcast(FinalKiller);
+						}
+					}
+					TargetChar->HandleDeath(FinalKiller);
 				}
 			}
 			else

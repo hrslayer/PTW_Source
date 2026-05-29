@@ -2,9 +2,10 @@
 
 #include "System/Prop/PTWPropSubsystem.h"
 #include "System/Prop/PTWPropData.h"
-
+#include "Misc/Crc.h"
 #include "EngineUtils.h"
 #include "Components/PrimitiveComponent.h"
+
 
 void UPTWPropSubsystem::RegisterByActorTag(FName GroupTag)
 {
@@ -41,7 +42,10 @@ void UPTWPropSubsystem::SetGroupEnabled(FName GroupTag, bool bEnabled)
 
 void UPTWPropSubsystem::ApplyActorEnabled(AActor* Actor, bool bEnabled)
 {
+	if (!IsValid(Actor)) return;
+
 	Actor->SetActorHiddenInGame(!bEnabled);
+	Actor->SetActorEnableCollision(bEnabled);
 
 	TArray<UPrimitiveComponent*> PrimComps;
 	Actor->GetComponents<UPrimitiveComponent>(PrimComps);
@@ -50,6 +54,8 @@ void UPTWPropSubsystem::ApplyActorEnabled(AActor* Actor, bool bEnabled)
 	{
 		if (!Comp) continue;
 
+		Comp->SetHiddenInGame(!bEnabled, true);
+		Comp->SetVisibility(bEnabled, true);
 		Comp->SetCollisionEnabled(
 			bEnabled ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision
 		);
@@ -99,7 +105,13 @@ void UPTWPropSubsystem::ApplySeededRandomByActorTag(FName GroupTag, int32 Seed, 
 
 static int32 MixSeedFast(int32 BaseSeed, FName GroupTag, int32 Salt)
 {
-	return HashCombineFast(HashCombineFast(BaseSeed, GetTypeHash(GroupTag)), Salt);
+	const FString GroupTagString = GroupTag.ToString();
+	const uint32 StableGroupHash = FCrc::StrCrc32(*GroupTagString);
+
+	uint32 MixedSeed = HashCombineFast(static_cast<uint32>(BaseSeed), StableGroupHash);
+	MixedSeed = HashCombineFast(MixedSeed, static_cast<uint32>(Salt));
+
+	return static_cast<int32>(MixedSeed);
 }
 
 void UPTWPropSubsystem::ApplyPropDataSeeded(const UPTWPropData* Data, int32 Seed)

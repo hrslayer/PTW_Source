@@ -14,6 +14,12 @@ namespace GameplayTags
 		namespace CoolDown
 		{
 			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Banana);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Booser);
+
+			namespace Fire
+			{
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Rocket);
+			}
 		}
 
 		namespace Action
@@ -27,6 +33,8 @@ namespace GameplayTags
 	{
 		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Damage);
 		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Duration);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Distance);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Radius);
 	}
 	
 	namespace Event
@@ -36,12 +44,42 @@ namespace GameplayTags
 		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Weapon_ReloadReFill);
 		namespace Round
 		{
-			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Economy_Depression);
-			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Economy_Inflation);
+			namespace Shop
+			{
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Inflation);
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(ExtremeDilemma);
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Gacha);
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(FlashSale);
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Debt);
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(RiskPurchase);
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(OpenRun);
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(BlackMarket);
+				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(CrowdFunding);
+				
+				namespace BlackList
+				{
+					PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack);
+					PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Defence);
+					PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Utility);
+					PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Chaos);
+					PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Lobby);
+				}
+				
+				namespace Monopoly
+				{
+					PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Attack);
+					PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Defence);
+					PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Utility);
+					PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Chaos);
+					PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Lobby);
+				}
+			}
+			
 		}
 		namespace Chaos
 		{
 			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(DwarfPotion);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(IceFloor);
 			
 		}
 		namespace Melee
@@ -60,13 +98,16 @@ namespace GameplayTags
 		{
 			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(IgnoreBatteryLevel);
 		}
-	}
-	
-	namespace Role
-	{
-		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Citizen);
-		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cop);
-		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Robber);
+
+		namespace Role
+		{
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(RedLight_Tagger);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Citizen);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cop);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Robber);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(King);
+		}
+		
 	}
 	
 	namespace Input
@@ -99,6 +140,7 @@ namespace GameplayTags
 		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Idle);
 		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Bomb);
 		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Stun);
+		PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(InPortal);
 		
 		namespace Passive
 		{
@@ -131,6 +173,7 @@ namespace GameplayTags
 		namespace Passive
 		{
 			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(ReflectShield);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(CombatManual);
 		}
 		
 	}
@@ -159,12 +202,14 @@ namespace GameplayTags
 				PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(RedLightSniper);
 			}
 			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Rocket);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Vacuum);
 		}
 		namespace State
 		{
 			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Equip);
 			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Reload);
 			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(UnEquip);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Overheated);
 		}
 
 		namespace EquipType
@@ -203,6 +248,7 @@ namespace GameplayTags
 		namespace Hit
 		{
 			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Wall);
+			PTW_API UE_DECLARE_GAMEPLAY_TAG_EXTERN(Confirm);
 		}
 		namespace MiniGame
 		{

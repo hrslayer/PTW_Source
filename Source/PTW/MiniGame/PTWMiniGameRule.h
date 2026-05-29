@@ -63,7 +63,7 @@ struct FPTWScoreRule
 	
 	/** 미니 게임 종료 후 순위/생존 여부에 따라 부여되는 점수*/
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Score")
-	int32 TotalScore = 1;
+	int32 MatchPoints = 3;
 };
 
 /**

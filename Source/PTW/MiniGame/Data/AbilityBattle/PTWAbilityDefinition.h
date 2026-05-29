@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "PTWTierStyleAsset.h"
 #include "Engine/DataAsset.h"
 #include "PTWAbilityDefinition.generated.h"
 
@@ -19,15 +20,18 @@ class PTW_API UPTWAbilityDefinition : public UDataAsset
 public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ability")
 	FText Name;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ability")
+	float StatValue;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ability")
-	FText Description;
+	FText DescriptionFormat;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ability")
 	TSoftObjectPtr<UTexture2D> Icon;
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ability")
-	int32 Tier;
+	EPTWAbilityTier Tier;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ability")
 	TSubclassOf<UGameplayEffect> EffectClass;

@@ -5,10 +5,12 @@
 
 #include "CoreFramework/PTWPlayerController.h"
 #include "CoreFramework/PTWPlayerState.h"
+#include "CoreFramework/Game/GameInstance/PTWGameInstance.h"
 #include "Debug/PTWLogCategorys.h"
 #include "MiniGame/PTWMiniGameRule.h"
 #include "System/Prop/PTWPropSubsystem.h"
 #include "Net/UnrealNetwork.h"
+#include "System/PTWScoreSubsystem.h"
 
 
 APTWGameState::APTWGameState()
@@ -16,6 +18,12 @@ APTWGameState::APTWGameState()
 	bReplicates = true;
 }
 
+void APTWGameState::BeginPlay()
+{
+	Super::BeginPlay();
+
+	
+}
 
 void APTWGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -35,7 +43,13 @@ void APTWGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(APTWGameState, Teams);
 	DOREPLIFETIME(APTWGameState, PropSeed);
 	DOREPLIFETIME(APTWGameState, PropData);
+	DOREPLIFETIME(APTWGameState, CurrentChaosEvent);
+	DOREPLIFETIME(APTWGameState, CurrentRoundEventTag);
+}
 
+void APTWGameState::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	Super::EndPlay(EndPlayReason);
 }
 
 void APTWGameState::UpdateRanking(const FPTWMiniGameRule& MiniGameRule)
@@ -101,63 +115,100 @@ void APTWGameState::AddRankedPlayer(APTWPlayerState* NewPlayerState)
 
 void APTWGameState::AddTeamScore(APlayerState* Player, int32 Score)
 {
-	if (IPTWPlayerRoundDataInterface* RoundDataInterface = Cast<IPTWPlayerRoundDataInterface>(Player))
+	if (IPTWPlayerDataInterface* RoundDataInterface = Cast<IPTWPlayerDataInterface>(Player))
 	{
 		int32 TeamId = RoundDataInterface->GetTeamId();
 		Teams[TeamId].TeamScore += Score;
 	}
 }
 
-void APTWGameState::ApplyMiniGameRankScore(const FPTWMiniGameRule& MiniGameRule)
-{
-	if (MiniGameRule.WinConditionRule.WinType == EPTWWinType::Survival)
-	{
-		// 팀전 우선
-		if (MiniGameRule.TeamRule.bUseTeam)
-		{
-			// 이긴 팀 전원에게 점수
-			for (FPTWTeamInfo& Team : Teams)
-			{
-				if (Team.TeamID != WinTeamId) continue;
-                
-				for (APlayerState* Member : Team.Members)
-				{
-					APTWPlayerState* PTWPlayerState = Cast<APTWPlayerState>(Member);
-					if (!PTWPlayerState) continue;
 
-					FPTWPlayerData PlayerData = PTWPlayerState->GetPlayerData();
-					PlayerData.TotalWinPoints += MiniGameRule.ScoreRule.TotalScore;
-					PTWPlayerState->SetPlayerData(PlayerData);
+void APTWGameState::ApplyMatchPoints(const FPTWMiniGameRule& MiniGameRule, TMap<FString, int32> MatchPointMap)
+{
+	SortMiniGameRankingData();
+	
+	int32 MatchPoint = MiniGameRule.ScoreRule.MatchPoints;
+
+	UPTWScoreSubsystem* ScoreSubsystem = GetGameInstance()->GetSubsystem<UPTWScoreSubsystem>();
+	if (!ScoreSubsystem) return;
+	
+	// 기본값이 아닌 임의 설정 우선
+	if (!MatchPointMap.IsEmpty())
+	{
+		for (auto& Pair : MatchPointMap)
+		{
+			const int32 Points = Pair.Value * GameData.ScoreRadio;
+
+			FPTWMiniGameRankingData* RankingData = MiniGameRankingDataMap.Find(Pair.Key);
+			if (!RankingData) continue;
+			
+			RankingData->AwardedPoints = Points;
+			ScoreSubsystem->AddWinPoint(Pair.Key, Points);
+		}
+	}
+	else
+	{
+		if (MiniGameRule.WinConditionRule.WinType == EPTWWinType::Survival)
+		{
+			// 팀전 우선
+			if (MiniGameRule.TeamRule.bUseTeam)
+			{
+				// 이긴 팀 전원에게 점수
+				for (auto& Pair : MiniGameRankingDataMap)
+				{
+					if (Pair.Value.TeamId != WinTeamId) continue;
+
+					const int32 Points = MatchPoint * GameData.ScoreRadio;
+					Pair.Value.AwardedPoints = Points;
+					ScoreSubsystem->AddWinPoint(Pair.Key, Points);
+				}
+			}
+			else
+			{
+				for (auto& Pair : MiniGameRankingDataMap)
+				{
+					if (Pair.Value.DeathOrder != -1) continue;
+
+					const int32 Points = MatchPoint * GameData.ScoreRadio;
+					Pair.Value.AwardedPoints = Points;
+					ScoreSubsystem->AddWinPoint(Pair.Key, Points);
 				}
 			}
 		}
 		else
 		{
-			// 생존자에게만 점수
-			if (AlivePlayers.Num() == 0) return;
-            
-			for (APlayerState* PlayerState : AlivePlayers)
+			for (auto& Pair : MiniGameRankingDataMap)
 			{
-				APTWPlayerState* PTWPlayerState = Cast<APTWPlayerState>(PlayerState);
-				if (!PTWPlayerState) continue;
+				const int32 Points = FMath::Max(0, (MatchPoint - (Pair.Value.Rank - 1)) * GameData.ScoreRadio);
 
-				FPTWPlayerData PlayerData = PTWPlayerState->GetPlayerData();
-				PlayerData.TotalWinPoints += MiniGameRule.ScoreRule.TotalScore;
-				PTWPlayerState->SetPlayerData(PlayerData);
+				Pair.Value.AwardedPoints = Points;
+				ScoreSubsystem->AddWinPoint(Pair.Key, Points);
 			}
 		}
 	}
-	else
+	
+	for (auto& Pair : MiniGameRankingDataMap)
 	{
-		if (RankedPlayers.Num() == 0) return;
-        
-		for (int i = 0; i < RankedPlayers.Num(); i++)
+		if (FPTWPlayerGameData* Data = ScoreSubsystem->FindPlayerGameData(Pair.Key))
 		{
-			FPTWPlayerData PlayerData = RankedPlayers[i]->GetPlayerData();
-			PlayerData.TotalWinPoints += RankedPlayers.Num() - i;
-			RankedPlayers[i]->SetPlayerData(PlayerData);
+			for (APlayerState* PS : PlayerArray)
+			{
+				APTWPlayerState* PTWPS = Cast<APTWPlayerState>(PS);
+				if (!PTWPS) continue;
+				if (PTWPS->GetUniqueId().ToString() != Pair.Key) continue;
+
+				PTWPS->SetPlayerData(Data->PlayerData);
+				break;
+			}
+			
+			UpdateLobbyRankingDataMap(Pair.Key, Data->PlayerData);
 		}
 	}
+	
+	GameData.ScoreRadio = 1.f;
+	
+	SortMiniGameRankingData();
+	SortLobbyRankingData();
 }
 
 void APTWGameState::OnRep_LoadedPlayerCount()
@@ -230,6 +281,7 @@ void APTWGameState::DecreaseCoundDown()
 void APTWGameState::AdvanceRound()
 {
 	CurrentRound++;
+	GameData.CurrentRound = CurrentRound;
 	UE_LOG(LogTemp, Warning, TEXT("Current Round: %d"), CurrentRound);
 }
 
@@ -265,7 +317,7 @@ void APTWGameState::SetRemainTime(int32 NewTime)
 void APTWGameState::SetCurrentRound(int32 NewRound)
 {
 	if (!HasAuthority()) return;
-	
+	GameData.CurrentRound = NewRound;
 	CurrentRound = NewRound;
 	
 	OnRep_CurrentRound();
@@ -338,13 +390,235 @@ void APTWGameState::SetWinTeamId(int32 TeamId)
 	WinTeamId = TeamId;
 }
 
-void APTWGameState::Server_SetPropSeed_Implementation(int32 NewSeed)
+void APTWGameState::SetCurrentMiniGameRule(const FPTWMiniGameRule& Rule)
+{
+	CurrentMiniGameRule = Rule;
+}
+
+void APTWGameState::SetCurrentMap(const FPTWMiniGameMapRow& CurrentMapRow)
 {
 	if (!HasAuthority()) return;
 
-	PropSeed = NewSeed;
+	GameData.CurrentMiniGameMapRow = CurrentMapRow;
+}
+
+void APTWGameState::AddCurrentChaosEvent(const FGameplayTag EventTag)
+{
+	if (!HasAuthority()) return;
 	
-	OnRep_PropSeed();
+	CurrentChaosEvent.AddTag(EventTag);
+}
+
+void APTWGameState::ResetCurrentChaosEvent()
+{
+	if (!HasAuthority()) return;
+
+	CurrentChaosEvent.Reset();
+}
+
+void APTWGameState::InitLobbyRankingDataMap(const TMap<FString, FPTWPlayerGameData>& InData)
+{
+	if (!HasAuthority()) return;
+
+	LobbyRankingDataMap.Empty();
+	
+	for (const auto& Pair : InData)
+	{
+		const FString& PlayerId = Pair.Key;
+		const FPTWPlayerGameData& PlayerGameData = Pair.Value;
+		
+		FPTWLobbyRankingData LobbyData;
+		LobbyData.PlayerId = PlayerId;
+		LobbyData.PlayerName = PlayerGameData.PlayerData.PlayerName;
+		LobbyData.Score = PlayerGameData.PlayerData.TotalWinPoints;
+		LobbyData.Gold = PlayerGameData.PlayerData.Gold;
+		LobbyData.InventoryItemIDs = PlayerGameData.PlayerData.InventoryItemIDs;
+		
+		LobbyRankingDataMap.Add(PlayerId, LobbyData);
+	}
+
+	SortLobbyRankingData();
+
+}
+void APTWGameState::UpdateLobbyRankingDataMap(const FString& PlayerId, const FPTWPlayerData& PlayerData)
+{
+	if (!HasAuthority()) return;
+	
+	if (!LobbyRankingDataMap.Contains(PlayerId)) return;
+
+	FPTWLobbyRankingData* LobbyPlayerData = LobbyRankingDataMap.Find(PlayerId);
+	if (!LobbyPlayerData) return;
+
+	LobbyPlayerData->Score = PlayerData.TotalWinPoints;
+	LobbyPlayerData->Gold = PlayerData.Gold;
+	//LobbyPlayerData->InventoryItemIDs = PlayerData.InventoryItemIDs;
+
+	SortLobbyRankingData();
+}
+
+void APTWGameState::SortLobbyRankingData()
+{
+	LobbyRankingData.Empty();
+
+	LobbyRankingDataMap.GenerateValueArray(LobbyRankingData);
+	
+	LobbyRankingData.Sort([](const FPTWLobbyRankingData& A, const FPTWLobbyRankingData& B)
+	{
+		if (A.Score != B.Score)
+		{
+			return A.Score > B.Score;
+		}
+
+		return A.Gold > B.Gold;
+	});
+	
+	for (int32 i = 0; i < LobbyRankingData.Num(); ++i)
+	{
+		if (i == 0)
+		{
+			LobbyRankingData[i].Rank = 1;
+			continue;
+		}
+
+		const auto& Prev = LobbyRankingData[i - 1];
+		auto& Curr = LobbyRankingData[i];
+
+		if (Curr.Score == Prev.Score && Curr.Gold == Prev.Gold)
+		{
+			Curr.Rank = Prev.Rank;
+		}
+		else
+		{
+			Curr.Rank = i + 1;
+		}
+	}
+
+	for (const FPTWLobbyRankingData& Data : LobbyRankingData)
+	{
+		if (FPTWLobbyRankingData* MapData = LobbyRankingDataMap.Find(Data.PlayerId))
+		{
+			MapData->Rank = Data.Rank;
+		}
+	}
+	
+}
+
+void APTWGameState::InitMiniGameRankingDataMap(const TMap<FString, FString>& InData)
+{
+	if (!HasAuthority()) return;
+
+	MiniGameRankingDataMap.Empty();
+
+	for (const auto& Pair : InData)
+	{
+		const FString& PlayerId = Pair.Key;
+		const FString& PlayerName = Pair.Value;
+
+		FPTWMiniGameRankingData MiniGameData;
+		MiniGameData.PlayerName = PlayerName;
+		MiniGameData.PlayerId   = Pair.Key;
+		
+		MiniGameRankingDataMap.Add(PlayerId, MiniGameData);
+	}
+
+	SortMiniGameRankingData();
+}
+
+void APTWGameState::UpdateMiniGameRankingDataMap(APlayerState* InPlayerState)
+{
+	if (!HasAuthority()) return;
+
+	APTWPlayerState* PlayerState = Cast<APTWPlayerState>(InPlayerState);
+	if (!PlayerState) return;
+	
+	if (!MiniGameRankingDataMap.Contains(PlayerState->GetUniqueId().ToString())) return;
+
+	FPTWMiniGameRankingData* RankingData = MiniGameRankingDataMap.Find(PlayerState->GetUniqueId().ToString());
+	if (!RankingData) return;
+
+	RankingData->Score = PlayerState->GetPlayerRoundData().Score;
+	RankingData->Kill = PlayerState->GetPlayerRoundData().KillCount;
+	RankingData->Death = PlayerState->GetPlayerRoundData().DeathCount;
+	RankingData->DeathOrder = PlayerState->GetPlayerRoundData().DeathOrder;
+	RankingData->TeamId = PlayerState->GetPlayerRoundData().TeamId;
+	//MiniGameRankingData->InventoryItemIDs = PlayerData.InventoryItemIDs;
+
+	SortMiniGameRankingData();
+}
+
+void APTWGameState::SortMiniGameRankingData()
+{
+    MiniGameRankingData.Empty();
+    MiniGameRankingDataMap.GenerateValueArray(MiniGameRankingData);
+    
+    if (CurrentMiniGameRule.WinConditionRule.WinType == EPTWWinType::Survival)
+    {
+        MiniGameRankingData.Sort([](const FPTWMiniGameRankingData& A, const FPTWMiniGameRankingData& B)
+        {
+            const bool bAAlive = (A.DeathOrder == 0);
+            const bool bBAlive = (B.DeathOrder == 0);
+
+            if (bAAlive != bBAlive) return bAAlive;
+
+            if (bAAlive)
+            {
+                if (A.Score != B.Score) return A.Score > B.Score;
+                return A.Kill > B.Kill;
+            }
+
+            if (A.DeathOrder != B.DeathOrder) return A.DeathOrder > B.DeathOrder;
+            if (A.Score != B.Score) return A.Score > B.Score;
+            return A.Kill > B.Kill;
+        });
+    }
+    else
+    {
+        MiniGameRankingData.Sort([](const FPTWMiniGameRankingData& A, const FPTWMiniGameRankingData& B)
+        {
+            if (A.Score != B.Score) return A.Score > B.Score;
+            if (A.Kill != B.Kill) return A.Kill > B.Kill;
+            return A.Death < B.Death;
+        });
+    }
+
+    for (int32 i = 0; i < MiniGameRankingData.Num(); ++i)
+    {
+        if (i == 0)
+        {
+            MiniGameRankingData[i].Rank = 1;
+            continue;
+        }
+
+        const auto& Prev = MiniGameRankingData[i - 1];
+        auto& Curr = MiniGameRankingData[i];
+
+        bool bSameRank = false;
+
+        if (CurrentMiniGameRule.WinConditionRule.WinType == EPTWWinType::Survival)
+        {
+            bSameRank =
+                (Curr.DeathOrder == Prev.DeathOrder) &&
+                (Curr.Score == Prev.Score) &&
+                (Curr.Kill == Prev.Kill);
+        }
+        else
+        {
+            bSameRank =
+                (Curr.Score == Prev.Score) &&
+                (Curr.Kill == Prev.Kill) &&
+                (Curr.Death == Prev.Death);
+        }
+
+        Curr.Rank = bSameRank ? Prev.Rank : i + 1;
+    }
+
+    for (const FPTWMiniGameRankingData& Data : MiniGameRankingData)
+    {
+        if (FPTWMiniGameRankingData* MapEntry = MiniGameRankingDataMap.Find(Data.PlayerId))
+        {
+            MapEntry->Rank = Data.Rank;
+        }
+    }
 }
 
 void APTWGameState::BroadcastChatMessage(const FString& Sender, const FString& Message)
@@ -363,6 +637,14 @@ void APTWGameState::Multicast_BroadcastMiniGameEnded_Implementation()
 	if (OnMiniGameEnded.IsBound())
 	{
 		OnMiniGameEnded.Broadcast();
+	}
+}
+
+void APTWGameState::Multicast_BroadcastPlayerLoggedOut_Implementation(const FString& UniqueId)
+{
+	if (OnPlayerLoggedOut.IsBound())
+	{
+		OnPlayerLoggedOut.Broadcast(UniqueId);
 	}
 }
 
@@ -417,6 +699,16 @@ void APTWGameState::OnRep_RankedPlayers()
 	OnUpdateRankedPlayers.Broadcast(RankedPlayers);
 }
 
+void APTWGameState::OnRep_LobbyRankingData()
+{
+	OnUpdateLobbyRankingData.Broadcast(LobbyRankingData);
+}
+
+void APTWGameState::OnRep_MiniGameRankingData()
+{
+	OnUpdateMiniGameRankingData.Broadcast(MiniGameRankingData);
+}
+
 void APTWGameState::OnRep_RouletteData()
 {
 	OnRoulettePhaseChanged.Broadcast(RouletteData);
@@ -448,13 +740,12 @@ void APTWGameState::OnRep_MaxMiniGameRound()
 
 void APTWGameState::OnRep_PropSeed()
 {
-	if (UWorld* World = GetWorld())
-	{
-		if (auto* PropSubsys = World->GetSubsystem<UPTWPropSubsystem>())
-		{
-			PropSubsys->ApplyPropDataSeeded(PropData, PropSeed);
-		}
-	}
+	TryApplyPropDataSeeded();
+}
+
+void APTWGameState::OnRep_PropData()
+{
+	TryApplyPropDataSeeded();
 }
 
 void APTWGameState::Server_SetPropData_Implementation(UPTWPropData* NewPropData)
@@ -462,17 +753,61 @@ void APTWGameState::Server_SetPropData_Implementation(UPTWPropData* NewPropData)
 	if (!HasAuthority()) return;
 
 	PropData = NewPropData;
-	
+
 	OnRep_PropData();
 }
 
-void APTWGameState::OnRep_PropData()
+void APTWGameState::Server_SetPropSeed_Implementation(int32 NewSeed)
 {
-	if (UWorld* World = GetWorld())
+	if (!HasAuthority()) return;
+
+	PropSeed = NewSeed;
+
+	OnRep_PropSeed();
+}
+
+void APTWGameState::TryApplyPropDataSeeded()
+{
+	if (!PropData)
 	{
-		if (auto* PropSubsys = World->GetSubsystem<UPTWPropSubsystem>())
-		{
-			PropSubsys->ApplyPropDataSeeded(PropData, PropSeed);
-		}
+		return;
 	}
+
+	if (PropSeed == 0)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	FTimerHandle PropApplyTimerHandle;
+	World->GetTimerManager().SetTimer(
+		PropApplyTimerHandle,
+		FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			if (!PropData)
+			{
+				return;
+			}
+
+			if (PropSeed == 0)
+			{
+				return;
+			}
+
+			if (UWorld* InnerWorld = GetWorld())
+			{
+				if (UPTWPropSubsystem* PropSubsys = InnerWorld->GetSubsystem<UPTWPropSubsystem>())
+				{
+					PropSubsys->ApplyPropDataSeeded(PropData, PropSeed);
+				}
+			}
+		}),
+		0.2f,
+		false
+	);
 }

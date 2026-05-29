@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
+#include "Data/PTWMiniGameRoleAsset.h"
 #include "PTWMiniGameMapRow.generated.h"
 /**
  * 
@@ -18,7 +19,9 @@ enum class EMiniGameMapType : uint8
 	CopsandRobbers	UMETA(DisplayName = "경찰과 도둑"),
 	Abyss     UMETA(DisplayName = "어비스"),
 	AbilityBattle     UMETA(DisplayName = "능력 배틀"),
-	RedLight     UMETA(DisplayName = "무궁화 꽃이 피었습니다")
+	RedLight     UMETA(DisplayName = "무궁화 꽃이 피었습니다"),
+	Rocket	UMETA(DisplayName = "로켓 난장판"),
+	Crown	UMETA(DisplayName = "왕관 뺏기")
 };
 
 USTRUCT(BlueprintType)
@@ -46,4 +49,7 @@ struct FPTWMiniGameMapRow : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FText MapDescription;
+
+	UPROPERTY(EditAnywhere)
+	TSoftObjectPtr<UPTWMiniGameRoleAsset> MiniGameRoleAsset;
 };

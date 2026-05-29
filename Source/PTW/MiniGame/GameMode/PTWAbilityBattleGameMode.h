@@ -37,14 +37,16 @@ protected:
 	void InitAttributeSet();
 	
 	/** 티어별로 AbilityPool 분류*/
-	void InitializeAbilityPool();
+	//void InitializeAbilityPool();
 	
 	/** 랜덤 선택지 생성*/
-	TArray<FName> GenerateDraftOptions(int32 Tier);
+	//TArray<FName> GenerateDraftOptions(EPTWAbilityTier Tier);
 	
-	void StartDraftAllPlayer(int32 Tier);
+	void StartDraftAllPlayer();
 	void StartDraftChargeTimer();
 	void EndDraft();
+
+	void DamageApplied(UAbilitySystemComponent* TargetASC, UAbilitySystemComponent* SourceASC, float Damage);
 private:
 	void GrandAbilityBattleAttributeSet();
 	void AttachPlayerStateComponent(APlayerController* Controller);
@@ -53,7 +55,7 @@ private:
 
 	void ApplyEffect(UAbilitySystemComponent* ASC, TSubclassOf<UGameplayEffect> Effect);
 	
-	TMap<int32, TArray<FName>> TierAbilityPool;
+	TMap<EPTWAbilityTier, TArray<FName>> TierAbilityPool;
 	
 	UPROPERTY(EditDefaultsOnly)
 	TObjectPtr<UDataTable> AbilityDataTable;

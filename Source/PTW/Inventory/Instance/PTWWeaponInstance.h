@@ -40,9 +40,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Weapon")
 	int32 GetMaxAmmo();
 	
+	int32 GetCurrentAmmo();
+	
 	APTWPlayerCharacter* GetItemInstanceOwner();
 	
 	void CopyProperties(UPTWWeaponInstance& CopyInst);
+	
+	void AddSpread();
+	
+	void RecoverSpread(float DeltaTime);
+	
+	FORCEINLINE float GetCurrentSpread() const {return CurrentSpread;} 
 	
 public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_CurrentAmmo)
@@ -59,4 +67,8 @@ public:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Replicated)
 	bool bAlreadyUsing = false;
+	
+	
+private:
+	float CurrentSpread = 0.0f;
 };

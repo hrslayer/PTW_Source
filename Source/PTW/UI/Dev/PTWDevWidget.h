@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Minigame/PTWMiniGameMapRow.h"
+#include "MiniGame/PTWMiniGameMapRow.h"
 #include "PTWDevWidget.generated.h"
 
 class UPTWButton;

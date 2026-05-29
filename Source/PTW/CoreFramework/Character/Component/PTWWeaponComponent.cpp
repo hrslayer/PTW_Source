@@ -2,16 +2,20 @@
 
 
 #include "CoreFramework/Character/Component/PTWWeaponComponent.h"
+
+#include "PTWUIControllerComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Weapon/PTWWeaponActor.h"
 #include "Weapon/PTWWeaponData.h"
 #include "GameFramework/Character.h"
 #include "CoreFramework/PTWPlayerCharacter.h"
+#include "CoreFramework/PTWPlayerController.h"
 #include "Inventory/PTWInventoryComponent.h"
+#include "Inventory/Instance/PTWWeaponInstance.h"
 
 UPTWWeaponComponent::UPTWWeaponComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
 	SetIsReplicatedByDefault(true);
 }
 
@@ -116,7 +120,7 @@ void UPTWWeaponComponent::ApplyRecoil()
 	}
 }
 
-float UPTWWeaponComponent::PlayMontage1P(UAnimMontage* MontageToPlay)
+float UPTWWeaponComponent::PlayMontage1P(UAnimMontage* MontageToPlay, float PlayRate)
 {
 	APTWPlayerCharacter* PlayerChar = Cast<APTWPlayerCharacter>(GetOwner());
 	if (!PlayerChar || !PlayerChar->IsLocallyControlled() || !PlayerChar->GetMesh1P() || !MontageToPlay)
@@ -127,12 +131,12 @@ float UPTWWeaponComponent::PlayMontage1P(UAnimMontage* MontageToPlay)
 	UAnimInstance* AnimInstance = PlayerChar->GetMesh1P()->GetAnimInstance();
 	if (AnimInstance)
 	{
-		return AnimInstance->Montage_Play(MontageToPlay, 1.0f);
+		return AnimInstance->Montage_Play(MontageToPlay, PlayRate);
 	}
 	return 0.0f;
 }
 
-void UPTWWeaponComponent::PlayWeaponMontageByTag(FGameplayTag AnimTag)
+void UPTWWeaponComponent::PlayWeaponMontageByTag(FGameplayTag AnimTag, float PlayRate)
 {
 	if (!CurrentWeapon) return;
 
@@ -144,10 +148,32 @@ void UPTWWeaponComponent::PlayWeaponMontageByTag(FGameplayTag AnimTag)
 		UAnimMontage* WeaponMontage = *Data->WeaponAnimMap.Find(AnimTag);
 		if (WeaponMontage)
 		{
-			CurrentWeapon->PlayWeaponMontage(WeaponMontage);
+			CurrentWeapon->PlayWeaponMontage(WeaponMontage, PlayRate);
 		}
 	}
 }
+
+void UPTWWeaponComponent::TickComponent(float DeltaTime, enum ELevelTick TickType,
+	FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	
+	if (CurrentWeapon && CurrentWeapon->GetWeaponItemInstance())
+	{
+		CurrentWeapon->GetWeaponItemInstance()->RecoverSpread(DeltaTime);
+		if (!OwnerPlayerController && !WeaponData && !WeaponInstance)
+		{
+			SetWeaponSpreadData();
+			return;
+		}
+		
+		if (OwnerPlayerController->UIControllerComponent)
+		{
+			OwnerPlayerController->UIControllerComponent->UpdateCrossHairSpread(WeaponInstance->GetCurrentSpread(), WeaponData->MaxSpread);
+		}
+	}
+}
+
 
 void UPTWWeaponComponent::OnRep_CurrentWeaponTag(const FGameplayTag& OldTag)
 {
@@ -167,5 +193,16 @@ void UPTWWeaponComponent::OnRep_CurrentWeaponTag(const FGameplayTag& OldTag)
 void UPTWWeaponComponent::OnRep_CurrentWeapon(APTWWeaponActor* OldWeapon)
 {
 
+}
+
+void UPTWWeaponComponent::SetWeaponSpreadData()
+{
+	APTWPlayerCharacter* OwnerPlayer = Cast<APTWPlayerCharacter>(GetOwner());
+	if (!OwnerPlayer) return;
+		
+	OwnerPlayerController = Cast<APTWPlayerController>(OwnerPlayer->GetController());
+	if (!OwnerPlayerController) return;
+	WeaponInstance = CurrentWeapon->GetWeaponItemInstance();
+	WeaponData = CurrentWeapon->GetWeaponData();
 }
 

@@ -9,6 +9,9 @@ void UPTWRedLightChargeWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
+	bIsFocusable = false;
+	SetVisibility(ESlateVisibility::HitTestInvisible);
+
 	if (APawn* OwningPawn = GetOwningPlayerPawn())
 	{
 		CachedRedLightChar = Cast<APTWRedLightCharacter>(OwningPawn);

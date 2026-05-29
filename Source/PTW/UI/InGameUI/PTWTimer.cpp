@@ -8,21 +8,19 @@
 
 void UPTWTimer::InitTimer()
 {
-	PTWGameState = GetWorld() ? GetWorld()->GetGameState<APTWGameState>() : nullptr;
+	APTWGameState* CurrentGameState = GetWorld() ? GetWorld()->GetGameState<APTWGameState>() : nullptr;
 
-	if (IsValid(PTWGameState))
+	if (IsValid(CurrentGameState))
 	{
-		// 중복 바인딩 방지 
-		PTWGameState->OnRemainTimeChanged.RemoveDynamic(this, &UPTWTimer::HandleRemainTimeChanged);
-		PTWGameState->OnMiniGameCountdownChanged.RemoveDynamic(this, &UPTWTimer::MiniGameCountdownChanged);
+		if (PTWGameState)
+		{
+			UnBindGameStateDelegates();
+		}
 
-		GetWorld()->GetTimerManager().ClearTimer(TimerHandle_InitGameState);
+		PTWGameState = CurrentGameState;
 
-		UE_LOG(LogTemp, Warning, TEXT("PTWTimer : InitTimer"));
-
-		// 델리게이트 바인딩
-		PTWGameState->OnRemainTimeChanged.AddDynamic(this, &UPTWTimer::HandleRemainTimeChanged);
-		PTWGameState->OnMiniGameCountdownChanged.AddDynamic(this, &UPTWTimer::MiniGameCountdownChanged);
+		// 2. 델리게이트 바인딩 함수 호출
+		BindGameStateDelegates();
 
 		// 초기 값 반영
 		HandleRemainTimeChanged(PTWGameState->GetRemainTime());
@@ -50,16 +48,7 @@ void UPTWTimer::NativeConstruct()
 
 void UPTWTimer::NativeDestruct()
 {
-	if (PTWGameState)
-	{
-		PTWGameState->OnRemainTimeChanged.RemoveDynamic(
-			this, &UPTWTimer::HandleRemainTimeChanged
-		);
-
-		PTWGameState->OnMiniGameCountdownChanged.RemoveDynamic(
-			this, &UPTWTimer::MiniGameCountdownChanged
-		);
-	}
+	UnBindGameStateDelegates();
 
 	Super::NativeDestruct();
 }
@@ -94,4 +83,35 @@ FText UPTWTimer::FormatTime(int32 Seconds) const
 	return FText::FromString(
 		FString::Printf(TEXT("%02d:%02d"), Min, Sec)
 	);
+}
+
+void UPTWTimer::BindGameStateDelegates()
+{
+	if (!PTWGameState) return;
+
+	PTWGameState->OnRemainTimeChanged.AddDynamic(this, &UPTWTimer::HandleRemainTimeChanged);
+	PTWGameState->OnMiniGameCountdownChanged.AddDynamic(this, &UPTWTimer::MiniGameCountdownChanged);
+
+	// GameState를 찾았으므로 초기화 대기 타이머는 중지
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(TimerHandle_InitGameState);
+	}
+}
+
+void UPTWTimer::UnBindGameStateDelegates()
+{
+	// 델리게이트 해제
+	if (PTWGameState)
+	{
+		PTWGameState->OnRemainTimeChanged.RemoveDynamic(this, &UPTWTimer::HandleRemainTimeChanged);
+		PTWGameState->OnMiniGameCountdownChanged.RemoveDynamic(this, &UPTWTimer::MiniGameCountdownChanged);
+		PTWGameState = nullptr;
+	}
+
+	// 초기화 대기용 타이머가 돌고 있다면 해제
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(TimerHandle_InitGameState);
+	}
 }

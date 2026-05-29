@@ -1,0 +1,3 @@
+#include "Debug/PTWLogCategorys.h"
+
+PTWDEDICATEDSERVER_API DEFINE_LOG_CATEGORY(Log_Server);

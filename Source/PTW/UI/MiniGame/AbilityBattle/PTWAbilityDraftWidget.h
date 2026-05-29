@@ -19,7 +19,7 @@ class PTW_API UPTWAbilityDraftWidget : public UUserWidget
 {
 	GENERATED_BODY()
 public:
-	void GenerateAbilityBoxes(TArray<FName> RowId);
+	void GenerateAbilityBoxes();
 
 	UFUNCTION()
 	void OnDraftSelected(FName RowId);

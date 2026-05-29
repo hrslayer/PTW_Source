@@ -11,9 +11,12 @@
 #include "GameplayAbilitySpec.h"
 #include "Gameplay/Shop/PTWShopNPC.h"
 #include "GAS/PTWDeliveryAttributeSet.h"
-#include "CoreFramework/Game/Gamestate/PTWGamestate.h"
+#include "CoreFramework/Game/GameState/PTWGameState.h"
 #include "CoreFramework/PTWPlayerController.h"
+#include "Game/GameMode/PTWGameMode.h"
+#include "Game/GameMode/PTWLobbyGameMode.h"
 #include "Inventory/PTWInventoryComponent.h"
+#include "System/Shop/PTWShopSubsystem.h"
 
 APTWPlayerState::APTWPlayerState()
 {
@@ -40,7 +43,9 @@ void APTWPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 
 	DOREPLIFETIME(APTWPlayerState, CurrentPlayerData);
 	DOREPLIFETIME(APTWPlayerState, PlayerRoundData);
+	DOREPLIFETIME(APTWPlayerState, LobbyItemData);
 	DOREPLIFETIME(APTWPlayerState, MiniGameComponent);
+	DOREPLIFETIME(APTWPlayerState, RoleData);
 }
 
 UAbilitySystemComponent* APTWPlayerState::GetAbilitySystemComponent() const
@@ -65,6 +70,14 @@ void APTWPlayerState::SetPlayerRoundData(const FPTWPlayerRoundData& NewData)
 	}
 }
 
+void APTWPlayerState::SetRoleData(const FPTWRoleData& NewData)
+{
+	if (HasAuthority())
+	{
+		RoleData = NewData;
+	}
+}
+
 FPTWPlayerData APTWPlayerState::GetPlayerData() const
 {
 	return CurrentPlayerData;
@@ -73,6 +86,11 @@ FPTWPlayerData APTWPlayerState::GetPlayerData() const
 FPTWPlayerRoundData APTWPlayerState::GetPlayerRoundData() const
 {
 	return PlayerRoundData;
+}
+
+FPTWRoleData APTWPlayerState::GetRoleData() const
+{
+	return RoleData;
 }
 
 void APTWPlayerState::SetLobbyItemData(const FPTWLobbyItemData& NewData)
@@ -89,6 +107,11 @@ void APTWPlayerState::SetMiniGameComponent(UActorComponent* NewMiniGameComponent
 	{
 		MiniGameComponent = NewMiniGameComponent;
 	}
+}
+
+void APTWPlayerState::ServerVotePredictedPlayer_Implementation(FUniqueNetIdRepl PredictedPlayer)
+{
+	LobbyItemData.PredictedData.PredictedPlayer = PredictedPlayer.ToString();
 }
 
 void APTWPlayerState::InjectAbility(TSubclassOf<UGameplayAbility> AbilityClass)
@@ -259,6 +282,18 @@ void APTWPlayerState::ResetRoundData()
 	}
 }
 
+void APTWPlayerState::VotePredictedPlayer(FUniqueNetIdRepl PredictedPlayer)
+{
+	if (HasAuthority())
+	{
+		LobbyItemData.PredictedData.PredictedPlayer = PredictedPlayer.ToString();
+	}
+	else
+	{
+		ServerVotePredictedPlayer(PredictedPlayer);
+	}
+}
+
 void APTWPlayerState::ResetInventoryItemId()
 {
 	if (HasAuthority())
@@ -289,6 +324,15 @@ void APTWPlayerState::OnRep_LobbyItemData()
 	
 }
 
+void APTWPlayerState::OnRep_RoleData()
+{
+}
+
+void APTWPlayerState::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	Super::EndPlay(EndPlayReason);
+}
+
 void APTWPlayerState::ServerRequestPurchase_Implementation(APTWShopNPC* ShopNPC, FName ItemID, int32 Cost)
 {
 	FString NewItemIDStr = ItemID.ToString();
@@ -307,7 +351,20 @@ void APTWPlayerState::ServerRequestPurchase_Implementation(APTWShopNPC* ShopNPC,
 	}
 	if (CurrentPlayerData.Gold >= Cost)
 	{
+		if (UPTWShopSubsystem* ShopSubsystem = GetWorld()->GetSubsystem<UPTWShopSubsystem>())
+		{
+			if (!ShopSubsystem->TryPurchaseItem(this, ShopNPC, ItemID))
+			{
+				return;
+			}
+		}
+		
 		CurrentPlayerData.Gold -= Cost;
+		
+		if (APTWGameState* GameState = GetWorld()->GetGameState<APTWGameState>())
+		{
+			GameState->UpdateLobbyRankingDataMap(GetUniqueId().ToString(), CurrentPlayerData);
+		}
 
 		if (NewItemIDStr.StartsWith(TEXT("Chaos_"), ESearchCase::IgnoreCase))
 		{
@@ -320,6 +377,14 @@ void APTWPlayerState::ServerRequestPurchase_Implementation(APTWShopNPC* ShopNPC,
 
 				GameState->AddChaosItemEntry(ChaosEntry);
 				UE_LOG(LogTemp, Log, TEXT("[Chaos Item] 카오스 아이템 구매 성공! GameState에 등록됨: %s (구매자: %s)"), *NewItemIDStr, *GetPlayerName());
+			}
+		}
+		else if (NewItemIDStr.StartsWith(TEXT("Lobby_"), ESearchCase::IgnoreCase))
+		{
+			if (APTWLobbyGameMode* LobbyGameMode = Cast<APTWLobbyGameMode>(GetWorld()->GetAuthGameMode()))
+			{
+				LobbyGameMode->ApplyLobbyItem(this, ItemID);
+				UE_LOG(LogTemp, Log, TEXT("[Lobby Item] 로비 아이템 구매 성공! (구매자: %s)"), *GetPlayerName());
 			}
 		}
 		else
@@ -354,6 +419,11 @@ void APTWPlayerState::ClientPurchaseSuccess_Implementation(APTWShopNPC* ShopNPC)
 {
 	if (ShopNPC)
 	{
+		if (APTWShopSpot* AssignedSpot = ShopNPC->GetAssignedSpot())
+		{
+			Client_AddDepletedSpot_Implementation(AssignedSpot);
+		}
+		
 		ShopNPC->CloseShop();
 	}
 }
@@ -381,4 +451,12 @@ void APTWPlayerState::ClearGAS()
 	AbilitySystemComponent->InitAbilityActorInfo(this, nullptr);
 
 	UE_LOG(LogTemp, Warning, TEXT("[GAS] %s 의 GAS 캐시가 완벽하게 초기화되었습니다! (전생 기억 삭제)"), *GetPlayerName());
+}
+
+void APTWPlayerState::Client_AddDepletedSpot_Implementation(APTWShopSpot* Spot)
+{
+	if (Spot)
+	{
+		LocalDepletedSpots.Add(Spot);
+	}
 }

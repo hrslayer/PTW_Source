@@ -11,7 +11,6 @@
 
 /* KillLog 델리게이트 */
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnKillLog, const FString&, const FString&);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSpectateTargetChanged, const FString&, TargetName);
 
 class APTWPlayerState;
 class UAbilitySystemComponent;
@@ -19,8 +18,6 @@ class UInputMappingContext;
 class UInputAction;
 class UPTWItemInstance;
 class UPTWUISubsystem;
-class APTWBombActor;
-class UPTWBombWarning;
 class UPTWDevWidget;
 class UPTWDeveloperComponent;
 class APostProcessVolume;
@@ -39,11 +36,9 @@ class PTW_API APTWPlayerController : public APlayerController
 
 public:
 	APTWPlayerController();
-
+	
 	/* 관전 시스템 함수 */
 	void StartSpectating();
-	UFUNCTION(NetMulticast, Reliable)
-	void MulticastRPC_StartSpectating();
 	
 	/* 데미지 인디케이터 */
 	UFUNCTION(Client, Reliable)
@@ -67,6 +62,10 @@ public:
 	UFUNCTION(Server, Reliable, WithValidation)
 	void Server_SendChatMessage(const FString& Message);
 
+	/* 플레이어가 레벨 이동 후 준비 완료를 알리는 RPC */
+	UFUNCTION(Server, Reliable)
+	void Server_NotifyReadyToPlay();
+	
 	/* 채팅창 종료 시 호출될 콜백 (ChatInput 위젯에서 호출) */
 	void OnChatInputFinished();
 
@@ -78,15 +77,19 @@ public:
 	void Client_PrepareLoadingScreen(ELoadingScreenType Type, FName MapRowName);
 	UFUNCTION(Client, Reliable)
 	void Client_DisplayLoadingScreen();
-
+	
+	/* 게임 결과 스탯 관련 */
+	UFUNCTION(Client, Reliable)
+	void Client_ReceiveResultData(const TArray<FPTWMiniGameResultData>& InResultData, const TArray<FPTWMiniGameTopResultData>& InTopResultData);
+	
 	/* 메인 메뉴로 이동 */
 	UFUNCTION(Client, Reliable)
 	void Client_OpenMainMenu();
-
-	/* (폭탄넘기기 미니게임) BombActor 델리게이트 바인딩 */
-	void BindBombDelegate(APTWBombActor* NewBomb);
-	void UnBindBombDelegate();
-
+	
+	/** 카오스 이벤트 스팸 광고 UI */
+	UFUNCTION(Client, Reliable)
+	void Client_SetSpamAd(bool bActive);
+	
 	void OnVoicePressed();
 	void OnVoiceReleased();
 
@@ -110,9 +113,6 @@ public:
 	
 	/* Controller Component Getter*/
 	FORCEINLINE UActorComponent* GetControllerComponent() const {return BaseControllerComponent;}
-
-	FORCEINLINE FString GetPlayerSessionId() const { return PlayerSessionId; };
-	FORCEINLINE void SetPlayerSessionId(const FString& NewPlayerSessionId) { PlayerSessionId = NewPlayerSessionId ; };
 	
 protected:
 	virtual void BeginPlay() override;
@@ -149,11 +149,6 @@ protected:
 	/* (로딩스크린) 로딩완료 알리기 */
 	UFUNCTION(Server, Reliable)
 	void Server_ReportLoadingComplete();
-
-	/* (폭탄넘기기 미니게임) 폭발 경고 UI */
-	void HandleBombOwnerChanged(APawn* NewOwnerPawn);
-	void ShowBombUI();
-	void HideBombUI();
 	
 	/* 개발자용 UI 토글 */
 	void ToggleDevUI();
@@ -176,12 +171,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Component")
 	TObjectPtr<UPTWUIControllerComponent> UIControllerComponent;
 
-	FOnSpectateTargetChanged OnSpectateTargetChanged;
-	
 protected:
-	// GameLift 접속을 위한 PlayerSessionId를 캐싱
-	FString PlayerSessionId;
-	
 	/* 캐싱된 Ability System Component */
 	UPROPERTY()
 	TObjectPtr<UAbilitySystemComponent> ASC;
@@ -189,10 +179,6 @@ protected:
 	/* 캐싱된 UI 서브시스템 */
 	UPROPERTY()
 	TObjectPtr<UPTWUISubsystem> UISubsystem;
-
-	/* (폭탄넘기기 미니게임) 캐싱 */
-	UPROPERTY()
-	APTWBombActor* CachedBombActor; // 폭탄 액터
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Abyss")
 	TObjectPtr<UPTWAbyssControllerComponent> AbyssControllerComponent;
@@ -229,11 +215,5 @@ protected:
 
 	// 개발자용 UI (F8)
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
-	TObjectPtr<UInputAction> DevWidgetAction;
-	
-	/* ---------- UI ---------- */
-	// 폭탄 경고 위젯
-	UPROPERTY(EditDefaultsOnly, Category = "UI|Bomb")
-	TSubclassOf<UPTWBombWarning> BombWarningWidgetClass;
-	
+	TObjectPtr<UInputAction> DevWidgetAction;	
 };

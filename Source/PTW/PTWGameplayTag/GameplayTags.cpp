@@ -12,6 +12,12 @@ namespace GameplayTags
 		namespace CoolDown
 		{
 			PTW_API UE_DEFINE_GAMEPLAY_TAG(Banana, "Ability.CoolDown.Banana");
+			PTW_API UE_DEFINE_GAMEPLAY_TAG(Booster, "Ability.CoolDown.Booster");
+
+			namespace Fire
+			{
+				PTW_API UE_DEFINE_GAMEPLAY_TAG(Banana, "Ability.CoolDown.Fire.Rocket");
+			}
 		}
 		
 		namespace Action
@@ -24,6 +30,8 @@ namespace GameplayTags
 	{
 		PTW_API UE_DEFINE_GAMEPLAY_TAG(Damage, "Data.Damage");
 		PTW_API UE_DEFINE_GAMEPLAY_TAG(Duration, "Data.Duration");
+		PTW_API UE_DEFINE_GAMEPLAY_TAG(Distance, "Data.Distance");
+		PTW_API UE_DEFINE_GAMEPLAY_TAG(Radius, "Data.Radius");
 	}
 	
 	namespace Event
@@ -34,12 +42,23 @@ namespace GameplayTags
 		
 		namespace Round
 		{
-			PTW_API UE_DEFINE_GAMEPLAY_TAG(Economy_Depression, "Event.Round.Economy.Depression");
-			PTW_API UE_DEFINE_GAMEPLAY_TAG(Economy_Inflation, "Event.Round.Economy.Inflation");
+			namespace Shop
+			{
+				PTW_API UE_DEFINE_GAMEPLAY_TAG(Inflation, "Event.Round.Shop.Inflation");
+				PTW_API UE_DEFINE_GAMEPLAY_TAG(ExtremeDilemma, "Event.Round.Shop.ExtremeDilemma");
+				PTW_API UE_DEFINE_GAMEPLAY_TAG(Gacha, "Event.Round.Shop.Gacha");
+				PTW_API UE_DEFINE_GAMEPLAY_TAG(FlashSale, "Event.Round.Shop.FlashSale");
+				PTW_API UE_DEFINE_GAMEPLAY_TAG(Debt, "Event.Round.Shop.Debt");
+				PTW_API UE_DEFINE_GAMEPLAY_TAG(RiskPurchase, "Event.Round.Shop.RiskPurchase");
+				PTW_API UE_DEFINE_GAMEPLAY_TAG(OpenRun, "Event.Round.Shop.OpenRun");
+				PTW_API UE_DEFINE_GAMEPLAY_TAG(BlackMarket, "Event.Round.Shop.BlackMarket");
+				PTW_API UE_DEFINE_GAMEPLAY_TAG(CrowdFunding, "Event.Round.Shop.CrowdFunding");
+			}
 		}
 		namespace Chaos
 		{
 			PTW_API UE_DEFINE_GAMEPLAY_TAG(DwarfPotion, "Event.Chaos.DwarfPotion");
+			PTW_API UE_DEFINE_GAMEPLAY_TAG(IceFloor, "Event.Chaos.IceFloor");
 		}
 		namespace Melee
 		{
@@ -51,18 +70,22 @@ namespace GameplayTags
 	{
 		PTW_API UE_DEFINE_GAMEPLAY_TAG(Bomb, "MiniGame.Bomb");
 		PTW_API UE_DEFINE_GAMEPLAY_TAG(Delivery, "MiniGame.Delivery");
-
+		PTW_API UE_DEFINE_GAMEPLAY_TAG(CopsAndRobbers, "MiniGame.CopsAndRobbers");
+		
 		namespace State
 		{
 			PTW_API UE_DEFINE_GAMEPLAY_TAG(IgnoreBatteryLevel, "MiniGame.State.IgnoreBatteryLevel");
 		}
-	}
-	
-	namespace Role
-	{
-		PTW_API UE_DEFINE_GAMEPLAY_TAG(Citizen, "Role.Citizen");
-		PTW_API UE_DEFINE_GAMEPLAY_TAG(Cop, "Role.Cop");
-		PTW_API UE_DEFINE_GAMEPLAY_TAG(Robber, "Role.Robber");
+
+		namespace Role
+		{
+			PTW_API UE_DEFINE_GAMEPLAY_TAG(RedLight_Tagger, "MiniGame.Role.RedLight_Tagger");
+			PTW_API UE_DEFINE_GAMEPLAY_TAG(Citizen, "MiniGame.Role.Citizen");
+			PTW_API UE_DEFINE_GAMEPLAY_TAG(Cop, "MiniGame.Role.Cop");
+			PTW_API UE_DEFINE_GAMEPLAY_TAG(Robber, "MiniGame.Role.Robber");
+			PTW_API UE_DEFINE_GAMEPLAY_TAG(King, "MiniGame.Role.King");
+			
+		}
 	}
 	
 	namespace Input
@@ -95,7 +118,8 @@ namespace GameplayTags
 		PTW_API UE_DEFINE_GAMEPLAY_TAG(Idle, "State.Idle");
 		PTW_API UE_DEFINE_GAMEPLAY_TAG(Bomb, "State.Bomb");
 		PTW_API UE_DEFINE_GAMEPLAY_TAG(Stun, "State.Stun");
-		
+		PTW_API UE_DEFINE_GAMEPLAY_TAG(InPortal, "State.InPortal");
+
 		namespace Passive
 		{
 			PTW_API UE_DEFINE_GAMEPLAY_TAG(ReflectShield, "State.Passive.ReflectShield");
@@ -129,6 +153,7 @@ namespace GameplayTags
 		namespace Passive
 		{
 			PTW_API UE_DEFINE_GAMEPLAY_TAG(ReflectShield, "Item.Passive.ReflectShield");
+			PTW_API UE_DEFINE_GAMEPLAY_TAG(CombatManual, "Item.Passive.CombatManual");
 		}
 	}
 	namespace Weapon
@@ -156,12 +181,14 @@ namespace GameplayTags
 				PTW_API UE_DEFINE_GAMEPLAY_TAG(RedLightSniper, "Weapon.Gun.Rifle.RedLightSniper");
 			}
 			PTW_API UE_DEFINE_GAMEPLAY_TAG(Rocket, "Weapon.Gun.Rocket");
+			PTW_API UE_DEFINE_GAMEPLAY_TAG(Vacuum, "Weapon.Gun.Vacuum");
 		}
 		namespace State
 		{
 			PTW_API UE_DEFINE_GAMEPLAY_TAG(Equip, "Weapon.State.Equip");
 			PTW_API UE_DEFINE_GAMEPLAY_TAG(Reload, "Weapon.State.Reload");
 			PTW_API UE_DEFINE_GAMEPLAY_TAG(UnEquip, "Weapon.State.UnEquip");
+			PTW_API UE_DEFINE_GAMEPLAY_TAG(Overheated, "Weapon.State.Overheated");
 		}
 		
 		namespace EquipType
@@ -202,6 +229,7 @@ namespace GameplayTags
 		namespace Hit
 		{
 			PTW_API UE_DEFINE_GAMEPLAY_TAG(Wall, "GameplayCue.Hit.Wall");
+			PTW_API UE_DEFINE_GAMEPLAY_TAG(Confirm, "GameplayCue.Hit.Confirm");
 		}
 		
 		namespace MiniGame

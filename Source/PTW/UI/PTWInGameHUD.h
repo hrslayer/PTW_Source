@@ -9,6 +9,7 @@
 #include "PTWInGameHUD.generated.h"
 
 class UAbilitySystemComponent;
+class UPTWInventoryComponent;
 
 class UPTWHealthBar;
 class UPTWKillLogUI;
@@ -19,6 +20,7 @@ class UPTWInventoryWidget;
 class UPTWMiniGameInventory;
 class UPTWNotificationWidget;
 class UPTWMiniGameTitle;
+class UPTWRoundEventTitle;
 class UPTWPortalCount;
 
 /**
@@ -36,6 +38,29 @@ public:
 	/* 알림 위젯에 문구 추가 */
 	void ShowNotification(const FNotificationData& Data);
 
+protected:
+	virtual void NativeDestruct() override;
+
+	virtual bool Initialize() override;
+
+	/* 알림 위젯 */
+	void TryShowNextNotification();
+
+	UFUNCTION()
+	void HandleNotificationFinished();
+
+	UFUNCTION()
+	void HandleGamePhaseChanged(EPTWGamePhase Phase);
+	UFUNCTION()
+	void HandleRoulettePhaseChanged(FPTWRouletteData RouletteData);
+
+	void BindGameState();
+	void UnBindGameState();
+
+private:
+	UPTWInventoryComponent* GetInventoryComponentFromASC(class UAbilitySystemComponent* ASC) const;
+
+public:
 	/* 위젯 바인딩 */
 	/* 체력바 */
 	UPROPERTY(meta = (BindWidget))
@@ -64,29 +89,14 @@ public:
 	/* 미니게임이름 */
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UPTWMiniGameTitle> MiniGameTitle;
+	/* 라운드이벤트 이름 */
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UPTWRoundEventTitle> RoundEventTitle;
 	/* 포탈카운트 */
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UPTWPortalCount> PortalCount;
 
 protected:
-	virtual void NativeDestruct() override;
-
-	virtual bool Initialize() override;
-
-	/* 알림 위젯 */
-	void TryShowNextNotification();
-
-	UFUNCTION()
-	void HandleNotificationFinished();
-
-	UFUNCTION()
-	void HandleGamePhaseChanged(EPTWGamePhase Phase);
-	UFUNCTION()
-	void HandleRoulettePhaseChanged(FPTWRouletteData RouletteData);
-
-	void BindGameState();
-	void UnBindGameState();
-
 	// GameState 대기용
 	FTimerHandle GameStateBindTimerHandle;
 

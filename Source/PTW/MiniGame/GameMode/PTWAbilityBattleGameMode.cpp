@@ -51,9 +51,9 @@ void APTWAbilityBattleGameMode::StartGame()
 	
 	GrandAbilityBattleAttributeSet();
 	InitAttributeSet();
-	InitializeAbilityPool();
+	//InitializeAbilityPool();
 
-	StartDraftAllPlayer(1);
+	StartDraftAllPlayer();
 
 	for (APlayerState* PlayerState : PTWGameState->PlayerArray)
 	{
@@ -118,7 +118,7 @@ void APTWAbilityBattleGameMode::RespawnPlayer(APTWPlayerController* SpawnPlayerC
 
 				UE_LOG(Log_AbilityControllerComponent, Log, TEXT("3초 후 DraftUI 실행"));
 
-				ControllerComponent->Client_ShowDraftUI(GenerateDraftOptions(1));
+				ControllerComponent->Client_ShowDraftUI();
 			},
 			3.0f,
 			false
@@ -213,7 +213,7 @@ void APTWAbilityBattleGameMode::HandleRespawn(APTWPlayerController* PlayerContro
 	}
 	else
 	{
-		ControllerComponent->Client_ShowDraftUI(GenerateDraftOptions(1));
+		ControllerComponent->Client_ShowDraftUI();
 		return;
 	}
 	
@@ -246,51 +246,51 @@ void APTWAbilityBattleGameMode::InitAttributeSet()
 	}
 }
 
-void APTWAbilityBattleGameMode::InitializeAbilityPool()
-{
-	if (!AbilityDataTable) return;
-	
-	for (auto& Row : AbilityDataTable->GetRowMap())
-	{
-		FName RowName = Row.Key;
-		FPTWAbilityRow* Data = (FPTWAbilityRow*)Row.Value;
-		if (!Data) continue;
+// void APTWAbilityBattleGameMode::InitializeAbilityPool()
+// {
+// 	if (!AbilityDataTable) return;
+// 	
+// 	for (auto& Row : AbilityDataTable->GetRowMap())
+// 	{
+// 		FName RowName = Row.Key;
+// 		FPTWAbilityRow* Data = (FPTWAbilityRow*)Row.Value;
+// 		if (!Data) continue;
+//
+// 		if (Data->AbilityDefinition.IsNull()) continue;
+//         
+// 		TierAbilityPool.FindOrAdd(Data->Tier).Add(RowName);
+// 	}
+// }
 
-		if (Data->AbilityDefinition.IsNull()) continue;
-        
-		TierAbilityPool.FindOrAdd(Data->Tier).Add(RowName);
-	}
-}
+// TArray<FName> APTWAbilityBattleGameMode::GenerateDraftOptions(EPTWAbilityTier Tier)
+// {
+// 	TArray<FName> Result;
+//
+// 	TArray<FName>* Pool = TierAbilityPool.Find(Tier);
+// 	if (!Pool)
+// 	{
+// 		UE_LOG(Log_AbilityBattle, Warning, TEXT("Pool is nullptr"));
+// 		return Result;
+// 	}
+//
+// 	TArray<FName> PoolCopy = *Pool;
+// 	
+// 	for (int i = 0; i < DraftOptionCount; i++)
+// 	{
+// 		int32 RandIndex = FMath::RandRange(0, PoolCopy.Num() - 1);
+// 		
+// 		FName RowId = (PoolCopy)[RandIndex];
+//
+// 		Result.Add(RowId);
+// 		PoolCopy.RemoveAt(RandIndex);
+// 	}
+//
+// 	UE_LOG(Log_AbilityBattle, Warning, TEXT("Draft Count %d"), Result.Num());
+// 	
+// 	return Result;
+// }
 
-TArray<FName> APTWAbilityBattleGameMode::GenerateDraftOptions(int32 Tier)
-{
-	TArray<FName> Result;
-
-	TArray<FName>* Pool = TierAbilityPool.Find(Tier);
-	if (!Pool)
-	{
-		UE_LOG(Log_AbilityBattle, Warning, TEXT("Pool is nullptr"));
-		return Result;
-	}
-
-	TArray<FName> PoolCopy = *Pool;
-	
-	for (int i = 0; i < DraftOptionCount; i++)
-	{
-		int32 RandIndex = FMath::RandRange(0, PoolCopy.Num() - 1);
-		
-		FName RowId = (PoolCopy)[RandIndex];
-
-		Result.Add(RowId);
-		PoolCopy.RemoveAt(RandIndex);
-	}
-
-	UE_LOG(Log_AbilityBattle, Warning, TEXT("Draft Count %d"), Result.Num());
-	
-	return Result;
-}
-
-void APTWAbilityBattleGameMode::StartDraftAllPlayer(int32 Tier)
+void APTWAbilityBattleGameMode::StartDraftAllPlayer()
 {
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
@@ -306,10 +306,10 @@ void APTWAbilityBattleGameMode::StartDraftAllPlayer(int32 Tier)
 		UPTWAbilityBattlePSComponent* AbilityBattlePSComponent = Cast<UPTWAbilityBattlePSComponent>(PlayerState->GetMiniGameComponent());
 		if (!AbilityBattlePSComponent) continue;
 		
-		TArray<FName> CurrentOptions = GenerateDraftOptions(Tier);
+		//TArray<FName> CurrentOptions = GenerateDraftOptions(Tier);
 
-		AbilityBattlePSComponent->SetCurrentDraft(CurrentOptions);
-		AbilityControllerComponent->Client_ShowDraftUI(CurrentOptions);
+		//AbilityBattlePSComponent->SetCurrentDraft(CurrentOptions);
+		AbilityControllerComponent->Client_ShowDraftUI();
 	}
 }
 
@@ -353,6 +353,19 @@ void APTWAbilityBattleGameMode::EndDraft()
 	}
 }
 
+void APTWAbilityBattleGameMode::DamageApplied(UAbilitySystemComponent* TargetASC, UAbilitySystemComponent* SourceASC,
+	float Damage)
+{
+	if (!SourceASC || SourceASC == TargetASC) return;
+
+	APlayerState* SourcePlayerState = Cast<APlayerState>(SourceASC->GetOwner());
+	if (!SourcePlayerState) return;
+
+	FString UniqueId = SourcePlayerState->GetUniqueId().ToString();
+	AddResultDataValue(UniqueId, EPTWResultStatName::AbilityBattle_Damage, Damage);
+}
+
+
 void APTWAbilityBattleGameMode::GrandAbilityBattleAttributeSet()
 {
 	UE_LOG(Log_AbilityBattle, Warning, TEXT("GrandAbilityBattleAttribute"));
@@ -380,8 +393,10 @@ void APTWAbilityBattleGameMode::GrandAbilityBattleAttributeSet()
 		
 		UPTWAttributeSet* MutableSet = const_cast<UPTWAttributeSet*>(PTWSet);
 		if (!MutableSet) continue;
-		
+
+		MutableSet->OnHit.AddUObject(AttributeSet, &UPTWAbilityBattleAttributeSet::HandleHit);
 		MutableSet->OnDamageApplied.AddUObject(AttributeSet, &UPTWAbilityBattleAttributeSet::HandleDamaged);
+		MutableSet->OnDamageApplied.AddUObject(this, &APTWAbilityBattleGameMode::DamageApplied);
 	}
 }
 

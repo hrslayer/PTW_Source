@@ -26,11 +26,22 @@ public:
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_PlayHitReact(const FVector& ImpactPoint);
 
+	UFUNCTION(BlueprintCallable, Category = "Outline")
+	void SetOutlineStencil(int32 StencilValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Outline")
+	void ClearOutlineStencil();
+
+	void OnInputTriggered();
+	void OnInputCompleted();
+
 protected:
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_Death();
 
 	void OnTagChanged(const FGameplayTag Tag, int32 NewCount);
+	void CheckIdleCondition();
+	void SetIdleState(bool bNewState);
 
 public:
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Animation")
@@ -42,7 +53,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Combat|Animation")
 	TObjectPtr<UAnimMontage> HitReact_Right;
 
-	bool IsInputInverted() const { return bIsInputInverted; }
+protected:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PTW|Tags")
+	FGameplayTag IdleGameplayTag;
+
+	bool bIsIdleState = false;
+	
+	FTimerHandle IdleCheckTimerHandle;
 
 private:
 	bool bIsInputInverted = false;

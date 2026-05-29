@@ -13,9 +13,10 @@
 #include "CoreFramework/PTWPlayerState.h"
 #include "GAS/PTWAttributeSet.h"
 #include "MiniGame/ControllerComponent/AbilityBattle/PTWAbilityControllerComponent.h"
+#include "MiniGame/Data/AbilityBattle/PTWAbilityRow.h"
 #include "MiniGame/PlayerStateComponent/PTWAbilityBattlePSComponent.h"
 
-void UPTWAbilityDraftWidget::GenerateAbilityBoxes(TArray<FName> RowId)
+void UPTWAbilityDraftWidget::GenerateAbilityBoxes()
 {
 	if (!HorizontalBox)
 	{
@@ -37,20 +38,46 @@ void UPTWAbilityDraftWidget::GenerateAbilityBoxes(TArray<FName> RowId)
 		return;
 	}
 	
-	if (RowId.IsEmpty())
+	TMap<EPTWAbilityTier, TArray<FName>> TierAbilityMap;
+	TArray<FName> AllRowIds = AbilityDraftDataTable->GetRowNames();
+	for (FName RowId : AllRowIds)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[DraftWidget] Rowid empty"));
+		FPTWAbilityRow* Row = AbilityDraftDataTable->FindRow<FPTWAbilityRow>(RowId, TEXT(""));
+		if (!Row) continue;
+		TierAbilityMap.FindOrAdd(Row->Tier).Add(RowId);
 	}
+
 	
 	HorizontalBox->ClearChildren();
+
+	APlayerController* PC = GetOwningPlayer();
+	if (!PC) return;
+
+	APTWPlayerState* PS = PC->GetPlayerState<APTWPlayerState>();
+	if (!PS) return;
+
+	UPTWAbilityBattlePSComponent* PSComponent = Cast<UPTWAbilityBattlePSComponent>(PS->GetMiniGameComponent());
+	if (!PSComponent) return;
+
+	TArray<FName> CurrentDraftRowIds;
 	
-	for (int32 i = 0; i < RowId.Num(); i++)
+	for (int32 i = 0; i < 3; i++)
 	{
 		UPTWAbilityBoxWidget* BoxWidget = CreateWidget<UPTWAbilityBoxWidget>(this, AbilityBoxClass);
-		if (!BoxWidget) return;
+		if (!BoxWidget) continue;
+		
+		EPTWAbilityTier Tier = BoxWidget->SelectedTier();
+		TArray<FName>* TierIds = TierAbilityMap.Find(Tier);
+		if (!TierIds || TierIds->IsEmpty()) continue;
+		
+		int32 RandIndex = FMath::RandRange(0, TierIds->Num() - 1);
+		FName PickedId = (*TierIds)[RandIndex];
+		TierIds->RemoveAt(RandIndex);
+		
+		CurrentDraftRowIds.Add(PickedId);
 		
 		BoxWidget->OnDraftSelected.AddUObject(this, &UPTWAbilityDraftWidget::OnDraftSelected);
-		BoxWidget->InitAbilityBoxWidget(RowId[i], AbilityDraftDataTable);
+		BoxWidget->InitAbilityBoxWidget(PickedId, AbilityDraftDataTable);
 		UHorizontalBoxSlot* BoxSlot = HorizontalBox->AddChildToHorizontalBox(BoxWidget);
 		
 		FSlateChildSize FillSize;
@@ -61,6 +88,8 @@ void UPTWAbilityDraftWidget::GenerateAbilityBoxes(TArray<FName> RowId)
 		BoxSlot->SetHorizontalAlignment(HAlign_Center); 
 		BoxSlot->SetVerticalAlignment(VAlign_Center);
 	}
+
+	PSComponent->Server_SetCurrentDraft(CurrentDraftRowIds);
 }
 
 void UPTWAbilityDraftWidget::OnDraftSelected(FName RowId)

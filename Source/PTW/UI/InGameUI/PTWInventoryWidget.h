@@ -12,6 +12,7 @@ class UPTWItemSlot;
 class APTWPlayerState;
 class UDataTable;
 class UPTWItemDefinition;
+class UTextBlock;
 
 /**
  * 
@@ -43,11 +44,16 @@ protected:
 	TObjectPtr<UDataTable> ItemDataTable;
 
 	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UUniformGridPanel> WeaponGrid;
+	TObjectPtr<UTextBlock> WeaponText;
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UTextBlock> ActiveItemText;
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UTextBlock> PassiveItemText;
 
 	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UUniformGridPanel> WeaponGrid;
+	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UUniformGridPanel> ActiveItemGrid;
-
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UUniformGridPanel> PassiveItemGrid;
 
@@ -59,5 +65,7 @@ protected:
 	int32 MaxRowsPerColumn = 10;
 
 private:
+	void UpdateTextVisibility();
+
 	TWeakObjectPtr<APTWPlayerState> CachedPlayerState;
 };

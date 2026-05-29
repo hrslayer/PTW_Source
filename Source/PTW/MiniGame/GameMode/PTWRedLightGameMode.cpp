@@ -8,13 +8,14 @@
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
-#include "System/PTWItemSpawnmanager.h"
+#include "System/PTWItemSpawnManager.h"
 #include "EngineUtils.h"
 #include "CoreFramework/PTWCombatInterface.h"
 #include "CoreFramework/PTWPlayerController.h"
 #include "CoreFramework/PTWPlayerState.h"
 #include "CoreFramework/Game/GameState/PTWGameState.h"
 #include "GameplayEffect.h"
+#include "PTWGameplayTag/GameplayTags.h"
 
 #define LOCTEXT_NAMESPACE "RedLightGamemode"
 
@@ -194,30 +195,51 @@ void APTWRedLightGameMode::StartRound()
 		}
 	}
 
-	TArray<APlayerController*> ValidPlayers;
+	//TArray<APlayerController*> ValidPlayers;
+	APlayerController* Tagger = nullptr;
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
 		if (APlayerController* PC = It->Get())
 		{
-			ValidPlayers.Add(PC);
+			//ValidPlayers.Add(PC);
+
+			APTWPlayerState* PlayerState = Cast<APTWPlayerState>(PC->PlayerState);
+			if (!PlayerState) continue;
+
+			if (PlayerState->GetRoleData().RoleTag == GameplayTags::MiniGame::Role::RedLight_Tagger)
+			{
+				Tagger = PC;
+			}
 		}
 	}
 
-	if (ValidPlayers.Num() > 0 && TaggerClass)
+	// if (ValidPlayers.Num() > 0 && TaggerClass)
+	// {
+	// 	int32 RandomIndex = FMath::RandRange(0, ValidPlayers.Num() - 1);
+	// 	APlayerController* SelectedPC = ValidPlayers[RandomIndex];
+	//
+	// 	AssignTagger(SelectedPC);
+	//
+	// 	FString TaggerName = SelectedPC->PlayerState ? SelectedPC->PlayerState->GetPlayerName() : TEXT("Unknown");
+	// 	UE_LOG(LogTemp, Warning, TEXT("[RedLight] 라운드 시작! %s 플레이어가 술래로 당첨되었습니다!"), *TaggerName);
+	// }
+	// else
+	// {
+	// 	UE_LOG(LogTemp, Error, TEXT("[RedLight] 에러: 참가 중인 플레이어가 없거나 TaggerClass가 설정되지 않았습니다!"));
+	// }
+
+	if (Tagger && TaggerClass)
 	{
-		int32 RandomIndex = FMath::RandRange(0, ValidPlayers.Num() - 1);
-		APlayerController* SelectedPC = ValidPlayers[RandomIndex];
+		AssignTagger(Tagger);
 
-		AssignTagger(SelectedPC);
-
-		FString TaggerName = SelectedPC->PlayerState ? SelectedPC->PlayerState->GetPlayerName() : TEXT("Unknown");
+		FString TaggerName = Tagger->PlayerState ? Tagger->PlayerState->GetPlayerName() : TEXT("Unknown");
 		UE_LOG(LogTemp, Warning, TEXT("[RedLight] 라운드 시작! %s 플레이어가 술래로 당첨되었습니다!"), *TaggerName);
 	}
 	else
 	{
-		UE_LOG(LogTemp, Error, TEXT("[RedLight] 에러: 참가 중인 플레이어가 없거나 TaggerClass가 설정되지 않았습니다!"));
+		UE_LOG(LogTemp, Error, TEXT("[RedLight] 에러: Tagger가 없거나 TaggerClass가 설정되지 않았습니다!"));
 	}
-
+	
 	if (InvincibleEffectClass)
 	{
 		for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)

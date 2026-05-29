@@ -8,6 +8,7 @@
 #include "Instance/PTWItemInstance.h"
 #include "../Weapon/PTWWeaponActor.h"
 #include "CoreFramework/PTWCombatInterface.h"
+#include "CoreFramework/PTWPlayerCharacter.h"
 #include "CoreFramework/PTWPlayerState.h"
 #include "CoreFramework/Character/Component/PTWWeaponComponent.h"
 #include "Engine/ActorChannel.h"
@@ -55,6 +56,8 @@ void UPTWInventoryComponent::GetLifetimeReplicatedProps(TArray<class FLifetimePr
 	DOREPLIFETIME(UPTWInventoryComponent, CurrentWeapon);
 	DOREPLIFETIME(UPTWInventoryComponent, CurrentActiveItemSlot);
 	DOREPLIFETIME(UPTWInventoryComponent, CurSelectingWeaponSlot);
+	DOREPLIFETIME(UPTWInventoryComponent, ActiveItemAbilityHandle);
+	DOREPLIFETIME(UPTWInventoryComponent, WeaponArr);
 }
 
  bool UPTWInventoryComponent::ReplicateSubobjects(class UActorChannel* Channel, class FOutBunch* Bunch,
@@ -91,21 +94,22 @@ void UPTWInventoryComponent::WeaponVisibleSetting(const FGameplayTag& WeaponTag,
 
 void UPTWInventoryComponent::OnItemInstanceCreated(UPTWItemInstance* ItemInstance)
 {
-	if (!ItemInstance || !GetOwner()->HasAuthority()) return;
-	
-	if (ItemInstance->IsA(UPTWPassiveItemInstance::StaticClass()))
+	if (!ItemInstance) return;
+
+	// 서버 전용 로직
+	if (GetOwner()->HasAuthority())
 	{
-		ApplyAllPassiveItems(ItemInstance);
+		if (ItemInstance->IsA(UPTWPassiveItemInstance::StaticClass()))
+			ApplyAllPassiveItems(ItemInstance);
+
+		if (ItemInstance->IsA(UPTWActiveItemInstance::StaticClass()))
+			EquipActiveItem(ItemInstance);
 	}
-	
-	if (ItemInstance->IsA(UPTWActiveItemInstance::StaticClass()))
-	{
-		EquipActiveItem(ItemInstance);
-	}
-	
+
+	// 서버/클라이언트 공통 로직
 	if (ItemInstance->IsA(UPTWWeaponInstance::StaticClass()))
 	{
-		WeaponArr.Add(Cast<UPTWWeaponInstance>(ItemInstance));
+		WeaponArr.AddUnique(Cast<UPTWWeaponInstance>(ItemInstance));
 	}
 }
 
@@ -248,6 +252,12 @@ void UPTWInventoryComponent::DropItem()
 
 void UPTWInventoryComponent::RemoveActiveItemGameplayAbilityHandle()
 {
+	AActor* Owner = GetOwner();
+	if (!Owner || !Owner->HasAuthority()) 
+	{
+		return;
+	}
+	
 	if (UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner()))
 	{
 		ASC->ClearAbility(ActiveItemAbilityHandle);
@@ -336,6 +346,11 @@ void UPTWInventoryComponent::SendEquipEventToASC(int32 SlotIndex)
 	}
 	
 	SendGameplayEvent(TargetInstance, SendTag, SlotIndex);
+
+	if (GetNetMode() != NM_DedicatedServer)
+	{
+		OnRep_CurSelectingWeaponSlot();
+	}
 }
 
 void UPTWInventoryComponent::SetWeaponActorHidden(UPTWItemInstance* Weapon, bool bInHidden)
@@ -348,27 +363,30 @@ void UPTWInventoryComponent::SetWeaponActorHidden(UPTWItemInstance* Weapon, bool
 	}
 }
 
-void UPTWInventoryComponent::SetSavedWeaponActor(AController* TargetController,
-	FSavedWeaponData SavedWeaponActors)
-{
-	SavedWeaponMaps.Add(TargetController, SavedWeaponActors);
-}
-
-const TArray<FWeaponPair>* UPTWInventoryComponent::GetWeaponActorsArr(AController* TargetController) const
-{
-	if (const FSavedWeaponData* FoundData = SavedWeaponMaps.Find(TargetController))
-	{
-		return &FoundData->WeaponArray;
-	}
-	
-	return nullptr;
-}
-
 void UPTWInventoryComponent::UseActiveItem()
 {
 	UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner());
-	
-	if (ASC && ActiveItemAbilityHandle.IsValid())
+	if (!ASC) return;
+
+	FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromHandle(ActiveItemAbilityHandle);
+
+	if (!Spec && CurrentActiveItemSlot && CurrentActiveItemSlot->ItemDef->AbilityToGrant) // 사용 시점에 Spec이 없다면 -> 재할당
+	{
+		TSubclassOf<UGameplayAbility> AbilityClass = CurrentActiveItemSlot->ItemDef->AbilityToGrant;
+        
+		Spec = ASC->FindAbilitySpecFromClass(AbilityClass);
+
+		if (Spec)
+		{
+			ActiveItemAbilityHandle = Spec->Handle;
+		}
+		else if (GetOwner()->HasAuthority())
+		{
+			ActiveItemAbilityHandle = ASC->GiveAbility(FGameplayAbilitySpec(AbilityClass, 1));
+			Spec = ASC->FindAbilitySpecFromHandle(ActiveItemAbilityHandle);
+		}
+	}
+	if (Spec)
 	{
 		ASC->TryActivateAbility(ActiveItemAbilityHandle);
 	}
@@ -377,26 +395,31 @@ void UPTWInventoryComponent::UseActiveItem()
 
 bool UPTWInventoryComponent::EquipActiveItem(UPTWItemInstance* ActiveItemInstance)
 {
-	if (CurrentActiveItemSlot) return false; // 이미 장착된 아이템이 있다면
-	if (!ActiveItemInstance || !ActiveItemInstance->ItemDef->AbilityToGrant) return false; 
-	
-	if (UPTWActiveItemInstance* Active = Cast<UPTWActiveItemInstance>(ActiveItemInstance))
-	{
-		Active->SetCurrentCount();
-		CurrentActiveItemSlot = Active;
-	}
-	
 	UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetOwner());
-	if (ASC)
+	if (!ASC || !ActiveItemInstance || !ActiveItemInstance->ItemDef->AbilityToGrant) return false;
+
+	TSubclassOf<UGameplayAbility> AbilityClass = ActiveItemInstance->ItemDef->AbilityToGrant;
+	
+	FGameplayAbilitySpec* ExistingSpec = ASC->FindAbilitySpecFromClass(AbilityClass);
+	if (ExistingSpec)
 	{
-		if (ActiveItemAbilityHandle.IsValid())
-		{
-			ASC->ClearAbility(ActiveItemAbilityHandle);
-		}
-		ActiveItemAbilityHandle = ASC->GiveAbility(FGameplayAbilitySpec(CurrentActiveItemSlot->ItemDef->AbilityToGrant, 1));
+		ActiveItemAbilityHandle = ExistingSpec->Handle; // 기존 핸들 재사용
+		return true;
 	}
 	
-	OnInventoryChanged.Broadcast();
+	if (ActiveItemAbilityHandle.IsValid())
+	{
+		ASC->ClearAbility(ActiveItemAbilityHandle);
+		ActiveItemAbilityHandle = FGameplayAbilitySpecHandle(); // 초기화
+	}
+	
+	if (GetOwner()->HasAuthority())
+	{
+		FGameplayAbilitySpec Spec(AbilityClass, 1, INDEX_NONE, this);
+		CurrentActiveItemSlot = Cast<UPTWActiveItemInstance>(ActiveItemInstance);
+		CurrentActiveItemSlot->SetCurrentCount();
+		ActiveItemAbilityHandle = ASC->GiveAbility(Spec);
+	}
 
 	return true;
 }
@@ -414,3 +437,12 @@ void UPTWInventoryComponent::ConsumeActiveItem()
 	}
 }
 
+void UPTWInventoryComponent::OnRep_WeaponArr()
+{
+	OnInventoryChanged.Broadcast();
+}
+
+void UPTWInventoryComponent::OnRep_CurSelectingWeaponSlot()
+{
+	OnInventoryChanged.Broadcast();
+}

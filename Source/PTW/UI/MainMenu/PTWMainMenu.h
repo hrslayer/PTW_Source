@@ -25,6 +25,9 @@ public:
 	void OnClickedExitButton();
 
 	void ToggleMainMenu(bool bIsMenuOpen);
+
+	UFUNCTION()
+	void OnClickedCustomizationButton();
 	
 protected:
 	virtual void NativeConstruct() override;
@@ -50,6 +53,12 @@ protected:
 
 	UPROPERTY(meta = (BindWidget))
 	UBorder* MaskingBorder;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> CustomizationButton;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UUserWidget> CustomizationMenuClass;
 
 	// 설정값
 	UPROPERTY(EditAnywhere, Category = "UI Animation")

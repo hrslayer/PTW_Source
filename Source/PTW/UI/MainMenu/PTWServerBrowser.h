@@ -1,10 +1,7 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
-
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "System/Session/PTWSessionConfig.h"
+#include "System/Server/PTWServerSettings.h"
 #include "PTWServerBrowser.generated.h"
 
 class UPTWMainMenu;
@@ -15,7 +12,7 @@ class UEditableText;
 class UCheckBox;
 class UPTWServerListRow;
 
-enum class EPTWRoundLimit : uint8;
+enum class EPTWRoundType : uint8;
 
 UCLASS()
 class PTW_API UPTWServerBrowser : public UUserWidget
@@ -27,25 +24,25 @@ protected:
 	virtual void NativeDestruct() override;
 	
 	UFUNCTION()
-	void OnClickedBackButton();
+	void OnClickedBack();
 	
 	UFUNCTION()
-	void OnClickedServerMenuButton();
+	void OnClickedServerMenu();
 	
 	UFUNCTION()
-	void OnClickedCreateServerButton();
+	void OnClickedCreateServer();
 	
 	UFUNCTION()
-	void OnClickedFindServerButton();
+	void OnClickedFindServer();
 	
 	UFUNCTION()
-	void OnClickedQuickMatchButton();
+	void OnClickedQuickMatch();
 	
 	UFUNCTION()
-	void OnClickedShortRoundButton();
+	void OnClickedShortRound();
 	
 	UFUNCTION()
-	void OnClickedLongRoundButton();
+	void OnClickedLongRound();
 	
 	UFUNCTION()
 	void OnFindSessionsComplete(const TArray<FOnlineSessionSearchResultBP>& SearchResults);
@@ -114,6 +111,6 @@ protected:
 	TObjectPtr<UButton> DevJoinButton;
 	
 private:
-	EPTWRoundLimit RoundLimit;
+	EPTWRoundType RoundLimit;
 
 };

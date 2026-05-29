@@ -130,6 +130,8 @@ protected:
 	FRotator InitialRotation;
 	UPROPERTY()
 	TObjectPtr<class UAudioComponent> ActiveLoopSound;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputMappingContext> TaggerMappingContext;
 
 	float SpacePressedTime;
 	

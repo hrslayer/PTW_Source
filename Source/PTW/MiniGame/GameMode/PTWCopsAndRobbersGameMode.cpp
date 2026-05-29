@@ -1,10 +1,6 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
 #include "PTWCopsAndRobbersGameMode.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayAbilitySpec.h"
-#include "Algo/RandomShuffle.h"
 #include "CoreFramework/PTWPlayerCharacter.h"
 #include "CoreFramework/PTWPlayerController.h"
 #include "CoreFramework/PTWPlayerState.h"
@@ -13,7 +9,15 @@
 #include "PTWGameplayTag/GameplayTags.h"
 #include "System/PTWItemSpawnManager.h"
 
-#define LOCTEXT_NAMESPACE "COPSANDROBBERSGAMEMODE"
+
+#define LOCTEXT_NAMESPACE "CopsAndRobbersGameMode"
+namespace CopsAndRobbersText
+{
+	const FText RobberBegin			= LOCTEXT("RobberBegin", "당신은 도둑입니다. 경찰을 피해 시민들 사이에 섞여 숨으세요.");
+	const FText CopsBegin			= LOCTEXT("CopsBegin", "당신은 경찰입니다. 시민 사이에 숨은 도둑들을 검거하세요.");
+}
+#undef LOCTEXT_NAMESPACE
+
 APTWCopsAndRobbersGameMode::APTWCopsAndRobbersGameMode()
 {
 	MiniGameRule.TimeRule.bUseTimer = true;
@@ -69,6 +73,9 @@ void APTWCopsAndRobbersGameMode::HandleSeamlessTravelPlayer(AController*& C)
 void APTWCopsAndRobbersGameMode::AssignTeam()
 {
 	Super::AssignTeam();
+	
+	AssignRole();
+	
 }
 
 void APTWCopsAndRobbersGameMode::HandlePlayerDeath(AActor* DeadActor, AActor* KillActor)
@@ -86,7 +93,7 @@ void APTWCopsAndRobbersGameMode::HandlePlayerDeath(AActor* DeadActor, AActor* Ki
 	UAbilitySystemComponent* AttackerASC = AttackerAS->GetAbilitySystemComponent();
 	if (!IsValid(AttackerASC)) return;
 	
-	if (VictimASC->HasMatchingGameplayTag(GameplayTags::Role::Citizen))
+	if (VictimASC->HasMatchingGameplayTag(GameplayTags::MiniGame::Role::Citizen))
 	{
 		// 공격자 경찰에게 리바운드 피해 GE 재생
 		check(ReboundGameplayEffect);
@@ -103,128 +110,195 @@ void APTWCopsAndRobbersGameMode::HandlePlayerDeath(AActor* DeadActor, AActor* Ki
 	}
 }
 
-void APTWCopsAndRobbersGameMode::WaitingToStartRound()
+void APTWCopsAndRobbersGameMode::AssignRole()
 {
-	Super::WaitingToStartRound();
+	TArray<APlayerState*> Cops;
+	TArray<APlayerState*> Robbers;
 	
-	for (int32 i = PTWGameState->GetTeams().Num(); i < MiniGameRule.TeamRule.NumTeams; ++i)
+	for (APlayerState* PS : PTWGameState->PlayerArray)
 	{
-		FPTWTeamInfo NewTeam;
-		NewTeam.TeamID = i;
-		PTWGameState->GetTeams().Add(NewTeam);
-	}
-	
-	FPTWTeamInfo& RobbersTeam = PTWGameState->GetTeams()[ROBBERS];
-	FPTWTeamInfo& CopsTeam = PTWGameState->GetTeams()[COPS];
-
-	RobbersTeam.Members.Empty();
-	CopsTeam.Members.Empty();
-	
-	TArray<APlayerState*> ValidPlayers;
-	for (APlayerState* PS : PTWGameState->AlivePlayers)
-	{
-		if (IsValid(PS)) 
-		{
-			ValidPlayers.Add(PS);
-		}
-	}
-
-	if (ValidPlayers.Num() == 0) return;
-	Algo::RandomShuffle(ValidPlayers);
-
-	const int32 MaxCopsSize = FMath::CeilToInt(ValidPlayers.Num() / 4.0f);
-	
-	CopsTeam.Members.Reserve(MaxCopsSize);
-	RobbersTeam.Members.Reserve(ValidPlayers.Num() - MaxCopsSize);
-	
-	for (int32 Index = 0; Index < ValidPlayers.Num(); ++Index)
-	{
-		APlayerState* PS = ValidPlayers[Index];
-
-		const bool bAssignToCops = (Index < MaxCopsSize);
-   
-		FPTWTeamInfo& TargetTeam = bAssignToCops ? CopsTeam : RobbersTeam;
-		const int32 TargetTeamId = bAssignToCops ? COPS : ROBBERS;
-    
-		TargetTeam.Members.Add(PS);
-    
-		if (IPTWPlayerRoundDataInterface* RoundData = Cast<IPTWPlayerRoundDataInterface>(PS))
-		{
-			RoundData->SetTeamId(TargetTeamId);
-		}
-	}
-	
-	for (APlayerState* Robber : RobbersTeam.Members)
-	{
-		UAbilitySystemComponent* ASC = CastChecked<IAbilitySystemInterface>(Robber)->GetAbilitySystemComponent();
+		APTWPlayerState* PTWPS = Cast<APTWPlayerState>(PS);
+		if (!PTWPS) continue;
+		
+		UAbilitySystemComponent* ASC = CastChecked<IAbilitySystemInterface>(PS)->GetAbilitySystemComponent();
 		check(ASC);
+
+		FGameplayTag RoleTag = PTWPS->GetRoleData().RoleTag;
+		ASC->AddLooseGameplayTag(RoleTag, 1, EGameplayTagReplicationState::TagAndCountToAll);
+
+		APTWPlayerController* PTWPC = Cast<APTWPlayerController>(PS->GetPlayerController());
+		if (!PTWPC) continue;
 		
-		ASC->AddLooseGameplayTag(GameplayTags::Role::Robber, 1, EGameplayTagReplicationState::TagAndCountToAll);
-		UE_LOG(LogTemp, Display, TEXT("Robber: %s"), *Robber->GetPlayerName());
-		
-		if (APlayerController* PC = Robber->GetPlayerController())
+		if (RoleTag.MatchesTag(GameplayTags::MiniGame::Role::Cop))
 		{
-			if (APTWPlayerController* PTWPC = Cast<APTWPlayerController>(PC))
+			PTWPC->SendMessage(CopsAndRobbersText::CopsBegin,ENotificationPriority::High,10.f);
+
+			check(BlindGameplayEffect);
+		
+			FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+			Context.AddSourceObject(ASC);
+		
+			FGameplayEffectSpecHandle BlindSpecHandle =
+				ASC->MakeOutgoingSpec(BlindGameplayEffect, 1.0f, Context);
+			if (BlindSpecHandle.IsValid())
 			{
-				PTWPC->SendMessage(LOCTEXT("CAR_RobbersStart", "당신은 도둑입니다. 경찰을 피해 시민들 사이에 섞여 숨으세요."),ENotificationPriority::High,10.f);
+				ASC->ApplyGameplayEffectSpecToSelf(*BlindSpecHandle.Data.Get());
 			}
+
+			check(CopsWeaponDefinition);
+			UPTWItemSpawnManager* SpawnManager = GetWorld()->GetSubsystem<UPTWItemSpawnManager>();
+			check(SpawnManager);
+		
+			APTWPlayerCharacter* PlayerCharacter = PS->GetPawn<APTWPlayerCharacter>();
+			check(PlayerCharacter);
+			SpawnManager->SpawnWeaponActor(PlayerCharacter, CopsWeaponDefinition, CopsWeaponDefinition->WeaponTag);
+
+			Cops.Add(PS);
+		}
+		else if (RoleTag.MatchesTag(GameplayTags::MiniGame::Role::Robber))
+		{
+			PTWPC->SendMessage(CopsAndRobbersText::RobberBegin,ENotificationPriority::High,10.f);
+
+			Robbers.Add(PS);
 		}
 	}
-	
-	for (APlayerState* Cop : CopsTeam.Members)
+
+	for (APlayerState* Cop : Cops)
 	{
-		UAbilitySystemComponent* ASC = CastChecked<IAbilitySystemInterface>(Cop)->GetAbilitySystemComponent();
-		check(ASC);
-		
-		ASC->AddLooseGameplayTag(GameplayTags::Role::Cop, 1, EGameplayTagReplicationState::TagAndCountToAll);
-		UE_LOG(LogTemp, Display, TEXT("Cop: %s"), *Cop->GetPlayerName());
-		
-		check(BlindGameplayEffect);
-		
-		FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
-		Context.AddSourceObject(ASC);
-		
-		FGameplayEffectSpecHandle BlindSpecHandle =
-			ASC->MakeOutgoingSpec(BlindGameplayEffect, 1.0f, Context);
-		if (BlindSpecHandle.IsValid())
+		if (APTWPlayerController* PTWCop = Cast<APTWPlayerController>(Cop->GetPlayerController()))
 		{
-			ASC->ApplyGameplayEffectSpecToSelf(*BlindSpecHandle.Data.Get());
-		}
-		
-		check(CopsWeaponDefinition);
-		UPTWItemSpawnManager* SpawnManager = GetWorld()->GetSubsystem<UPTWItemSpawnManager>();
-		check(SpawnManager);
-		
-		APTWPlayerCharacter* PlayerCharacter = Cop->GetPawn<APTWPlayerCharacter>();
-		check(PlayerCharacter);
-		SpawnManager->SpawnWeaponActor(PlayerCharacter, CopsWeaponDefinition, CopsWeaponDefinition->WeaponTag);;
-		
-		if (APlayerController* PC = Cop->GetPlayerController())
-		{
-			if (APTWPlayerController* PTWPC = Cast<APTWPlayerController>(PC))
+			if (UPTWCARControllerComponent* ControllerComponent = Cast<UPTWCARControllerComponent>(PTWCop->GetControllerComponent()))
 			{
-				PTWPC->SendMessage(LOCTEXT("CAR_CopsStart", "당신은 경찰입니다. 시민 사이에 숨은 도둑들을 검거하세요."),ENotificationPriority::High,10.f);
-			}
-		}
-	}
-	
-	// 경찰은 도둑들의 PlayerNameTagWidget을 볼 수 없도록 Widget을 파괴.
-	// 경찰은 도둑과 AI를 구분할 수 없도록 하기 위함.
-	for (APlayerState* Cop : CopsTeam.Members)
-	{
-		if (APlayerController* PC = Cop->GetPlayerController())
-		{
-			if (APTWPlayerController* PTWPC = Cast<APTWPlayerController>(PC))
-			{
-				if (UPTWCARControllerComponent* ControllerComponent = Cast<UPTWCARControllerComponent>(PTWPC->GetControllerComponent()))
+				for (APlayerState* Robber : Robbers)
 				{
-					for (APlayerState* Robber : RobbersTeam.Members)
-					{
-						ControllerComponent->ClientRPC_TargetDestroyNameTag(Robber);
-					}
+					ControllerComponent->ClientRPC_TargetDestroyNameTag(Robber);
 				}
 			}
 		}
 	}
 }
-#undef LOCTEXT_NAMESPACE
+
+void APTWCopsAndRobbersGameMode::WaitingToStartRound()
+{
+	Super::WaitingToStartRound();
+	
+	// for (int32 i = PTWGameState->GetTeams().Num(); i < MiniGameRule.TeamRule.NumTeams; ++i)
+	// {
+	// 	FPTWTeamInfo NewTeam;
+	// 	NewTeam.TeamID = i;
+	// 	PTWGameState->GetTeams().Add(NewTeam);
+	// }
+	//
+	// FPTWTeamInfo& RobbersTeam = PTWGameState->GetTeams()[ROBBERS];
+	// FPTWTeamInfo& CopsTeam = PTWGameState->GetTeams()[COPS];
+	//
+	// RobbersTeam.Members.Empty();
+	// CopsTeam.Members.Empty();
+	//
+	// TArray<APlayerState*> ValidPlayers;
+	// for (APlayerState* PS : PTWGameState->AlivePlayers)
+	// {
+	// 	if (IsValid(PS)) 
+	// 	{
+	// 		ValidPlayers.Add(PS);
+	// 	}
+	// }
+	//
+	// if (ValidPlayers.Num() == 0) return;
+	// Algo::RandomShuffle(ValidPlayers);
+	//
+	// const int32 MaxCopsSize = FMath::CeilToInt(ValidPlayers.Num() / 4.0f);
+	//
+	// CopsTeam.Members.Reserve(MaxCopsSize);
+	// RobbersTeam.Members.Reserve(ValidPlayers.Num() - MaxCopsSize);
+	//
+	// for (int32 Index = 0; Index < ValidPlayers.Num(); ++Index)
+	// {
+	// 	APlayerState* PS = ValidPlayers[Index];
+	//
+	// 	const bool bAssignToCops = (Index < MaxCopsSize);
+ //   
+	// 	FPTWTeamInfo& TargetTeam = bAssignToCops ? CopsTeam : RobbersTeam;
+	// 	const int32 TargetTeamId = bAssignToCops ? COPS : ROBBERS;
+ //    
+	// 	TargetTeam.Members.Add(PS);
+ //    
+	// 	if (IPTWPlayerDataInterface* RoundData = Cast<IPTWPlayerDataInterface>(PS))
+	// 	{
+	// 		RoundData->SetTeamId(TargetTeamId);
+	// 	}
+	// }
+	//
+	// for (APlayerState* Robber : RobbersTeam.Members)
+	// {
+	// 	UAbilitySystemComponent* ASC = CastChecked<IAbilitySystemInterface>(Robber)->GetAbilitySystemComponent();
+	// 	check(ASC);
+	// 	
+	// 	ASC->AddLooseGameplayTag(GameplayTags::Role::Robber, 1, EGameplayTagReplicationState::TagAndCountToAll);
+	// 	UE_LOG(LogTemp, Display, TEXT("Robber: %s"), *Robber->GetPlayerName());
+	// 	
+	// 	if (APlayerController* PC = Robber->GetPlayerController())
+	// 	{
+	// 		if (APTWPlayerController* PTWPC = Cast<APTWPlayerController>(PC))
+	// 		{
+	// 			PTWPC->SendMessage(CopsAndRobbersText::RobberBegin,ENotificationPriority::High,10.f);
+	// 		}
+	// 	}
+	// }
+	//
+	// for (APlayerState* Cop : CopsTeam.Members)
+	// {
+	// 	UAbilitySystemComponent* ASC = CastChecked<IAbilitySystemInterface>(Cop)->GetAbilitySystemComponent();
+	// 	check(ASC);
+	// 	
+	// 	ASC->AddLooseGameplayTag(GameplayTags::Role::Cop, 1, EGameplayTagReplicationState::TagAndCountToAll);
+	// 	UE_LOG(LogTemp, Display, TEXT("Cop: %s"), *Cop->GetPlayerName());
+	// 	
+	// 	check(BlindGameplayEffect);
+	// 	
+	// 	FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
+	// 	Context.AddSourceObject(ASC);
+	// 	
+	// 	FGameplayEffectSpecHandle BlindSpecHandle =
+	// 		ASC->MakeOutgoingSpec(BlindGameplayEffect, 1.0f, Context);
+	// 	if (BlindSpecHandle.IsValid())
+	// 	{
+	// 		ASC->ApplyGameplayEffectSpecToSelf(*BlindSpecHandle.Data.Get());
+	// 	}
+	// 	
+	// 	check(CopsWeaponDefinition);
+	// 	UPTWItemSpawnManager* SpawnManager = GetWorld()->GetSubsystem<UPTWItemSpawnManager>();
+	// 	check(SpawnManager);
+	// 	
+	// 	APTWPlayerCharacter* PlayerCharacter = Cop->GetPawn<APTWPlayerCharacter>();
+	// 	check(PlayerCharacter);
+	// 	SpawnManager->SpawnWeaponActor(PlayerCharacter, CopsWeaponDefinition, CopsWeaponDefinition->WeaponTag);;
+	// 	
+	// 	if (APlayerController* PC = Cop->GetPlayerController())
+	// 	{
+	// 		if (APTWPlayerController* PTWPC = Cast<APTWPlayerController>(PC))
+	// 		{
+	// 			PTWPC->SendMessage(CopsAndRobbersText::CopsBegin,ENotificationPriority::High,10.f);
+	// 		}
+	// 	}
+	// }
+	//
+	// // 경찰은 도둑들의 PlayerNameTagWidget을 볼 수 없도록 Widget을 파괴.
+	// // 경찰은 도둑과 AI를 구분할 수 없도록 하기 위함.
+	// for (APlayerState* Cop : CopsTeam.Members)
+	// {
+	// 	if (APlayerController* PC = Cop->GetPlayerController())
+	// 	{
+	// 		if (APTWPlayerController* PTWPC = Cast<APTWPlayerController>(PC))
+	// 		{
+	// 			if (UPTWCARControllerComponent* ControllerComponent = Cast<UPTWCARControllerComponent>(PTWPC->GetControllerComponent()))
+	// 			{
+	// 				for (APlayerState* Robber : RobbersTeam.Members)
+	// 				{
+	// 					ControllerComponent->ClientRPC_TargetDestroyNameTag(Robber);
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// }
+}

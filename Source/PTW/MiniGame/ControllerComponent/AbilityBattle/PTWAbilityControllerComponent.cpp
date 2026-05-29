@@ -139,10 +139,14 @@ void UPTWAbilityControllerComponent::Server_SelectedAbility_Implementation(FName
 	FGameplayEffectContextHandle Context = ASC->MakeEffectContext();
 	Context.AddSourceObject(ASC->GetOwnerActor());
 
-	FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(Definition->EffectClass, 1, Context);
-	if (!SpecHandle.IsValid()) return;
-
-	ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+	if (Definition->EffectClass)
+	{
+		FGameplayEffectSpecHandle SpecHandle = ASC->MakeOutgoingSpec(Definition->EffectClass, 1, Context);
+		if (SpecHandle.IsValid())
+		{
+			ASC->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+		}
+	}
 	
 	PlayerStateComponent->DecreaseDraftCharges();
 
@@ -160,7 +164,7 @@ void UPTWAbilityControllerComponent::Server_SelectedAbility_Implementation(FName
 	UE_LOG(LogTemp, Log, TEXT("Server_SelectedAbility_Implementation"));
 }
 
-void UPTWAbilityControllerComponent::Client_ShowDraftUI_Implementation(const TArray<FName>& RowId)
+void UPTWAbilityControllerComponent::Client_ShowDraftUI_Implementation()
 {
 	if (!DraftWidgetClass) return;
 	
@@ -171,14 +175,18 @@ void UPTWAbilityControllerComponent::Client_ShowDraftUI_Implementation(const TAr
 	if (!DraftWidget)
 	{
 		DraftWidget = CreateWidget<UPTWAbilityDraftWidget>(PlayerController,DraftWidgetClass);
-		DraftWidget->AddToViewport(50);
+		
 	}
 
-	DraftWidget->bIsSelected = false;
+	if (DraftWidget)
+	{
+		DraftWidget->bIsSelected = false;
+		DraftWidget->GenerateAbilityBoxes();
+		DraftWidget->HorizontalBox->SetVisibility(ESlateVisibility::Visible);
 	
-	DraftWidget->GenerateAbilityBoxes(RowId);
-	DraftWidget->HorizontalBox->SetVisibility(ESlateVisibility::Visible);
-
+		DraftWidget->AddToViewport(50);
+	}
+	
 	GetWorld()->GetTimerManager().SetTimerForNextTick([this, PlayerController]()
 	{
 		UE_LOG(Log_AbilityControllerComponent, Log, TEXT("NextTick 진입"));

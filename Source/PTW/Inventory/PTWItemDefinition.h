@@ -56,6 +56,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Active", meta = (EditCondition = "ItemType == EItemType::Active", EditConditionHides))
 	FGameplayTag CooldownTag;
 	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Active", meta = (EditCondition = "ItemType == EItemType::Active", EditConditionHides))
+	float ActiveItemDamage;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon", meta = (EditCondition = "ItemType == EItemType::Weapon", EditConditionHides))
 	TSubclassOf<APTWWeaponActor> WeaponClass;
 	

@@ -1,9 +1,8 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/SpectatorPawn.h"
 #include "PTWSpectatorPawn.generated.h"
+
 
 class APTWBaseCharacter;
 class USpringArmComponent;
@@ -12,6 +11,11 @@ class UInputMappingContext;
 class UInputAction;
 struct FInputActionValue;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSpectateTargetChanged, const APlayerState*, TargetPlayerState);
+
+/*
+ * 관전 로직을 담당하는 관전자 폰입니다.
+ */
 UCLASS()
 class PTW_API APTWSpectatorPawn : public ASpectatorPawn
 {
@@ -25,22 +29,25 @@ public:
 	bool FindNextSpectatorTarget(APawn*& NewViewTarget);
 	void SpectateNextPlayer();
 	
+	// 관전이 시작되면 호출
 	void BeginSpectate();
+	
+	// 관전이 종료되면 호출 (결과연출, 부활 등)
+	UFUNCTION()
 	void EndSpectate();
+	
 	
 	UFUNCTION()
 	void StartSpectate();
+	
+	// 현재 관전대상이 죽으면 호출
 	UFUNCTION()
 	void OnTargetDeath(AActor* DeadActor, AActor* KillerActor);
+	
+	
 	UFUNCTION()
 	void BlockSpectating();
-	
-	void Move(const FInputActionValue& Value);
-	void Look(const FInputActionValue& Value);
-	void Zoom(const FInputActionValue& Value);
-	void OnInputSpectateNext();
-	void SwitchToFirstThirdPerson();
-	
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -49,8 +56,11 @@ protected:
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void OnRep_Controller() override;
 
-public:
-	FTimerHandle SpectateTimer;
+	void Move(const FInputActionValue& Value);
+	void Look(const FInputActionValue& Value);
+	void Zoom(const FInputActionValue& Value);
+	void OnInputSpectateNext();
+	void SwitchToFirstThirdPerson();
 	
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Components")
@@ -77,29 +87,35 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	UInputAction* SpectateNextAction;
 	
-	// TObjectPtr<ACharacter> CurrentViewTarget;
-	
-	/* 현재 줌 값 */
+	// 현재 줌 값
 	UPROPERTY(VisibleAnywhere, Category = "ThirdPerson")
 	float CurrentZoomDistance;
 	float Current3PZoomDistance;
 	float Starting3PZoomDistance;
 	
-	/* 최대 줌 길이 */
+	// 현재 관전 대상
+	UPROPERTY()
+	TObjectPtr<APTWBaseCharacter> CurrentViewCharacter;
+	
+	// 최대 줌 길이
 	UPROPERTY(EditDefaultsOnly, Category = "ThirdPerson|Zoom", meta=(ClampMin="100.0", ClampMax="1000.0"))
 	float MaxZoom;
 	
-	/* 최소 줌 길이 (1인칭은 개별적인 '0'값을 사용) */
+	// 최소 줌 길이 (1인칭은 개별적인 '0'값을 사용)
 	UPROPERTY(EditDefaultsOnly, Category = "ThirdPerson|Zoom", meta=(ClampMin="100.0", ClampMax="1000.0"))
 	float MinZoom;
 	
-	/* 한번에 줌이 될 길이 */
+	// 한번에 줌이 될 길이
 	UPROPERTY(EditDefaultsOnly, Category = "ThirdPerson|Zoom", meta=(ClampMin="100.0", ClampMax="1000.0"))
 	float ZoomStep;
 	
 	bool bIsFreeCamera;
 	bool bIsFirstPerson;
+
+	bool bAllowSpectating = true;
 	
-private:
-	TObjectPtr<APTWBaseCharacter> CurrentViewCharacter;
+public:
+	FTimerHandle SpectateTimer;
+	
+	FOnSpectateTargetChanged OnSpectateTargetChanged;
 };

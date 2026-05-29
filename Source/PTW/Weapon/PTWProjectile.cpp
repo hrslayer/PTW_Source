@@ -69,10 +69,13 @@ bool APTWProjectile::ExplosionOverlapSetter(TArray<FOverlapResult>& OverlapResul
 	FVector ExplosionLocation = GetActorLocation();
 	FCollisionShape SphereShape = FCollisionShape::MakeSphere(ExplosionRad);
 	FCollisionQueryParams CollisionParams;
-				
-	CollisionParams.AddIgnoredActor(this);
-	CollisionParams.AddIgnoredActor(GetInstigator());
-				
+			
+	if (!bIsSelfTarget)
+	{
+		CollisionParams.AddIgnoredActor(this);
+		CollisionParams.AddIgnoredActor(GetInstigator());
+	}
+	
 	bool bHasOverlap = GetWorld()->OverlapMultiByChannel(
 		OverlapResults,
 		ExplosionLocation,
@@ -89,45 +92,43 @@ bool APTWProjectile::ExplosionOverlapSetter(TArray<FOverlapResult>& OverlapResul
 
 void APTWProjectile::ApplyExplosionDamage(TArray<FOverlapResult>& OverlapResults, float FinalDamage)
 {
-	TSet<AActor*> ProcessedActors; // 중복 제거를 위해 사용
+	TSet<AActor*> ProcessedActors;
 	const FVector ExplosionLocation = GetActorLocation();
-	
+	const float ExplosionRadius = ExplosionRad; // 프로젝타일에 설정된 반경 값
+
 	for (const FOverlapResult& Result : OverlapResults)
 	{
 		AActor* HitActor = Result.GetActor();
-		
 		if (!HitActor || ProcessedActors.Contains(HitActor)) continue;
 		ProcessedActors.Add(HitActor);
-		
-		FHitResult ObstarcleHit;
-		
-		if (CheckingBlock(ObstarcleHit, ExplosionLocation, HitActor))
+
+		FHitResult ObstacleHit;
+		if (CheckingBlock(ObstacleHit, ExplosionLocation, HitActor))
 		{
-			if (ObstarcleHit.GetActor() != HitActor) continue;
+			if (ObstacleHit.GetActor() != HitActor) continue;
 		}
-			
+
 		UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitActor);
 		if (TargetASC && DamageSpecHandle.IsValid())
 		{
-			FGameplayEffectSpecHandle NewHandle = TargetASC->MakeOutgoingSpec(
-					DamageSpecHandle.Data->Def->GetClass(), 
-					1.0f, 
-					TargetASC->MakeEffectContext()
-			);
+			FGameplayEffectSpec* NewSpec = new FGameplayEffectSpec(*DamageSpecHandle.Data.Get());
+			FGameplayEffectSpecHandle IndividualHandle(NewSpec);
 			
-			if (NewHandle.IsValid())
-			{
-				NewHandle.Data->SetSetByCallerMagnitude(GameplayTags::Data::Damage, -FinalDamage);
-				TargetASC->ApplyGameplayEffectSpecToSelf(*NewHandle.Data.Get());
-				
-				FGameplayCueParameters TargetCueParams;
-				TargetCueParams.Location = HitActor->GetActorLocation();
-				TargetCueParams.Instigator = GetInstigator();
-				TargetASC->ExecuteGameplayCue(FGameplayTag::RequestGameplayTag(FName("GameplayCue.Weapon.HitImpact")), TargetCueParams);
-			}
+			float Distance = FVector::Dist(ExplosionLocation, HitActor->GetActorLocation());
+			
+			IndividualHandle.Data->SetSetByCallerMagnitude(GameplayTags::Data::Damage, -FinalDamage);
+			IndividualHandle.Data->SetSetByCallerMagnitude(GameplayTags::Data::Distance, Distance);
+			IndividualHandle.Data->SetSetByCallerMagnitude(GameplayTags::Data::Radius, ExplosionRadius);
+
+
+			TargetASC->ApplyGameplayEffectSpecToSelf(*IndividualHandle.Data.Get());
+			
+			FGameplayCueParameters TargetCueParams;
+			TargetCueParams.Location = HitActor->GetActorLocation();
+			TargetCueParams.Instigator = GetInstigator();
+			TargetASC->ExecuteGameplayCue(GameplayTags::GameplayCue::Weapon::HitImpact, TargetCueParams);
 		}
 	}
-	
 }
 
 bool APTWProjectile::CheckingBlock(FHitResult& ObstarcleHit, const FVector ExplosionLocation, const AActor* HitActor)

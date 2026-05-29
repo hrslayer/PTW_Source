@@ -50,7 +50,8 @@ void UPTWRankingBoard::UnbindPlayerStates()
 	{
 		if (PS)
 		{
-			PS->OnPlayerDataUpdated.RemoveAll(this);
+			//PS->OnPlayerDataUpdated.RemoveAll(this);
+			PS->OnPlayerDataUpdated.RemoveDynamic(this, &ThisClass::OnPlayerDataChanged);
 		}
 	}
 	CachedPlayerStates.Empty();
@@ -76,7 +77,7 @@ void UPTWRankingBoard::UpdateRanking()
 
 	switch (GS->GetCurrentGamePhase())
 	{
-	case EPTWGamePhase::PreGameLobby:
+	case EPTWGamePhase::Staging:
 		Text_GameTitle->SetVisibility(ESlateVisibility::Collapsed);
 		SelectedHeaderClass = PreGameHeaderClass;
 		SelectedEntryClass = PreGameEntryClass;
@@ -88,7 +89,7 @@ void UPTWRankingBoard::UpdateRanking()
 		SelectedHeaderClass = MiniGameHeaderClass;
 		SelectedEntryClass = MiniGameEntryClass;
 		break;
-	case EPTWGamePhase::PostGameLobby:
+	case EPTWGamePhase::Lobby:
 		TitleString = FString::Printf(TEXT("ROUND %d "), Round);
 		Text_GameTitle->SetText(FText::FromString(TitleString));
 		Text_GameTitle->SetVisibility(ESlateVisibility::Visible);

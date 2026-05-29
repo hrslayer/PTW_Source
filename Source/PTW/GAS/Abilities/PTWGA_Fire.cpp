@@ -12,6 +12,7 @@
 #include "CoreFramework/PTWPlayerCharacter.h"
 #include "CoreFramework/PTWPlayerController.h"
 #include "CoreFramework/PTWPlayerState.h"
+#include "CoreFramework/Character/Component/PTWUIControllerComponent.h"
 #include "CoreFramework/Character/Component/PTWWeaponComponent.h"
 #include "GAS/PTWWeaponAttributeSet.h"
 #include "Inventory/PTWInventoryComponent.h"
@@ -23,6 +24,8 @@
 #include "Inventory/Instance/PTWWeaponInstance.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "PTWGameplayTag/GameplayTags.h"
+#include "UI/PTWInGameHUD.h"
+#include "UObject/FastReferenceCollector.h"
 
 UPTWGA_Fire::UPTWGA_Fire()
 {
@@ -34,13 +37,19 @@ void UPTWGA_Fire::InputReleased(const FGameplayAbilitySpecHandle Handle, const F
 	const FGameplayAbilityActivationInfo ActivationInfo)
 {
 	StopFire();
-	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+	
+	if (bIsAutoFire)
+	{
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+	}
 }
 
 void UPTWGA_Fire::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+	
+	bIsFirstShot = true;
 	
 	if (!CommitCheck(Handle,ActorInfo, ActivationInfo))
 	{
@@ -49,10 +58,13 @@ void UPTWGA_Fire::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const
 		return;
 	}
 	
-	if (UAbilityTask_WaitInputRelease* WaitInputRelease = UAbilityTask_WaitInputRelease::WaitInputRelease(this))
+	if (bIsAutoFire)
 	{
-		WaitInputRelease->OnRelease.AddDynamic(this, &UPTWGA_Fire::OnInputReleasedCallback);
-		WaitInputRelease->ReadyForActivation();
+		if (UAbilityTask_WaitInputRelease* WaitInputRelease = UAbilityTask_WaitInputRelease::WaitInputRelease(this))
+		{
+			WaitInputRelease->OnRelease.AddDynamic(this, &UPTWGA_Fire::OnInputReleasedCallback);
+			WaitInputRelease->ReadyForActivation();
+		}
 	}
 	
 	StartFire();
@@ -66,6 +78,8 @@ bool UPTWGA_Fire::CanActivateAbility(const FGameplayAbilitySpecHandle Handle,
 	{
 		if (!CheckCost(Handle, ActorInfo, OptionalRelevantTags))
 		{
+			// [로그 추가]
+			UE_LOG(LogTemp, Error, TEXT("[PTWGA_Fire] CanActivateAbility 실패: 코스트(Cost)가 부족합니다."));
 			return true;
 		}
 		return false;
@@ -87,10 +101,13 @@ void UPTWGA_Fire::StartFire()
 	
 	AutoFire();
 	
-	if (!GetWorld()->GetTimerManager().IsTimerActive(AutoFireTimer))
+	if (bIsAutoFire)
 	{
-		TWeakObjectPtr<ThisClass> WeakThis = this;
-		GetWorld()->GetTimerManager().SetTimer(AutoFireTimer, this, &UPTWGA_Fire::AutoFire ,FireRate, true);
+		if (!GetWorld()->GetTimerManager().IsTimerActive(AutoFireTimer))
+		{
+			TWeakObjectPtr<ThisClass> WeakThis = this;
+			GetWorld()->GetTimerManager().SetTimer(AutoFireTimer, this, &UPTWGA_Fire::AutoFire ,FireRate, true);
+		}
 	}
 }
 
@@ -141,7 +158,8 @@ void UPTWGA_Fire::MakeGameplayCue(FPTWGameplayCueMakingInfo Infos, FGameplayTag 
 void UPTWGA_Fire::AutoFire()
 {
 	const FPTWFireConext Context = GetFireContext();
-	if (!Context.IsValid() || !CommitAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo))
+
+	if (!Context.IsValid())
 	{
 		PlayEmptyClickCue();
 		StopFire();
@@ -149,25 +167,68 @@ void UPTWGA_Fire::AutoFire()
 		return;
 	}
 	
+	// 단발용, 연발용 로직 수정
+	if (bIsAutoFire)
+	{
+		if (bIsFirstShot)
+		{
+			if (!CommitAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo))
+			{
+				PlayEmptyClickCue();
+				StopFire();
+				EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
+				return;
+			}
+			bIsFirstShot = false;
+		}
+		else
+		{
+			if (!CommitAbilityCost(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo))
+			{
+				PlayEmptyClickCue();
+				StopFire();
+				EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
+				return;
+			}
+		}
+	}
+	else
+	{
+		if (!CommitAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo))
+		{
+			PlayEmptyClickCue();
+			StopFire();
+			EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
+			return;
+		}
+	}
+	//
+	// if (!CommitAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo))
+	// {
+	// 	PlayEmptyClickCue();
+	// 	StopFire();
+	// 	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, true);
+	// 	return;
+	// }
+	
 	
 	FPTWGameplayCueMakingInfo CueInfos;
 	CueInfos.PlayerCharacter = Context.PC;
 	CueInfos.Weapon1P = Context.WeaponInst->SpawnedWeapon1P;
 	MakeGameplayCue(CueInfos, GameplayTags::GameplayCue::Weapon::Fire);
 	
-	EHitType CurrentWeponHitType = Context.WeaponInst->GetWeaponHitType();
 	
-	if (CurrentWeponHitType == EHitType::HitScan)
-	{
-		HandleHitScan(Context);
-	}
-	else if (CurrentWeponHitType == EHitType::Projectile)
-	{
-		ProjectileTypeFire(Context.PC, Context.WeaponInst);
-	}
 	
-	//캐릭터 반동 함수 호출(박태웅)
+	
+	
+	PerformFireAction(Context);
+	
 	Context.PC->GetWeaponComponent()->ApplyRecoil();
+	
+	if (!bIsAutoFire)
+	{
+		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
+	}
 }
 
 void UPTWGA_Fire::PerformLineTrace(FHitResult& HitResult, APTWPlayerCharacter* PlayerCharacter)
@@ -179,26 +240,63 @@ void UPTWGA_Fire::PerformLineTrace(FHitResult& HitResult, APTWPlayerCharacter* P
 	FRotator Rot;
 	Controller->GetPlayerViewPoint(StartLoc, Rot);
 	
-	FVector End = StartLoc + (Rot.Vector() * MaxRange);
+	FVector BaseAimDir = Rot.Vector();
+	FVector FinalAimDir = BaseAimDir;
+	
+	const FPTWFireConext Context = GetFireContext();
+	
+	if (Context.IsValid() && Context.WeaponInst)
+	{
+		float CurrentSpreadDegrees = Context.WeaponInst->GetCurrentSpread();
+		FinalAimDir = FMath::VRandCone(BaseAimDir, FMath::DegreesToRadians(CurrentSpreadDegrees));
+		Context.WeaponInst->AddSpread();
+	}
+	
+	FVector End = StartLoc + (FinalAimDir * MaxRange);
 	
 	AActor* Avatar = GetAvatarActorFromActorInfo();
-	
+    
 	FCollisionQueryParams Params;
 	Params.AddIgnoredActor(Avatar); 
-	
+    
 	float SweepRad = 35.0f;
-	
 	FCollisionShape SphereShape = FCollisionShape::MakeSphere(SweepRad);
-	
+    
 	GetWorld()->SweepSingleByChannel(
-		HitResult,
-		StartLoc,
-		End,
-		FQuat::Identity,
-		ECC_WeaponAttack,
-		SphereShape,
-		Params
-		);
+	   HitResult,
+	   StartLoc,
+	   End,
+	   FQuat::Identity,
+	   ECC_WeaponAttack,
+	   SphereShape,
+	   Params
+	);
+	
+	// DrawDebugLine(
+	// 	GetWorld(),
+	// 	StartLoc,
+	// 	HitResult.bBlockingHit ? HitResult.ImpactPoint : End,
+	// 	FColor::Red,       // 선 색상
+	// 	false,             // 영구 지속 여부
+	// 	0.5f,              // 선이 화면에 남아있을 시간 (초)
+	// 	0,                 // Depth Priority
+	// 	1.0f               // 선 두께
+	// );
+	//
+	// if (HitResult.bBlockingHit)
+	// {
+	// 	DrawDebugSphere(
+	// 		GetWorld(),
+	// 		HitResult.ImpactPoint,
+	// 		15.0f,          // 구체 반지름
+	// 		12,             // 세그먼트 (부드러움)
+	// 		FColor::Green,  // 맞은 지점은 녹색으로 표시
+	// 		false,
+	// 		0.5f
+	// 	);
+	// }
+	
+	Controller->UIControllerComponent->UpdateCrossHairSpread(Context.WeaponInst->GetCurrentSpread(), Context.WeaponInst->GetWeaponData()->MaxSpread);
 }
 
 bool UPTWGA_Fire::ValidateHitResult(FHitResult& HitResult)
@@ -261,6 +359,29 @@ void UPTWGA_Fire::ApplyDamageToTarget(const FGameplayAbilityTargetDataHandle& Ta
 			{
 				SpecHandle.Data->SetSetByCallerMagnitude(Tag_Damage, -CurrentDamage);
 				ApplyGameplayEffectSpecToTarget(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, SpecHandle, TargetData);
+			}
+
+			if (HitResult->bBlockingHit)
+			{
+				UAbilitySystemComponent* MyASC = GetAbilitySystemComponentFromActorInfo();
+				if (MyASC)
+				{
+					FGameplayCueParameters CueParams;
+					CueParams.Instigator = GetAvatarActorFromActorInfo();
+					CueParams.Location = HitResult->ImpactPoint;
+
+					if (HitResult->BoneName == FName("head"))
+					{
+						CueParams.AggregatedSourceTags.AddTag(
+							GameplayTags::State::HitReaction_HeadShot
+						);
+					}
+
+					MyASC->ExecuteGameplayCue(
+						GameplayTags::GameplayCue::Hit::Confirm,
+						CueParams
+					);
+				}
 			}
 		}
 		else
@@ -404,3 +525,36 @@ void UPTWGA_Fire::PlayEmptyClickCue()
 	Infos.Weapon1P = Context.WeaponInst->SpawnedWeapon1P;
 	MakeGameplayCue(Infos, GameplayTags::GameplayCue::Weapon::Empty);
 }
+
+void UPTWGA_Fire::PerformFireAction(const FPTWFireConext Context)
+{
+	FHitResult HitResult;
+	PerformLineTrace(HitResult, Context.PC); // 클라이언트 Hit
+	
+	if (!HasAuthority(&CurrentActivationInfo)) return;
+	
+	if (ValidateHitResult(HitResult)) //서버 검증 Server-Side Validation
+	{
+		FGameplayAbilityTargetDataHandle TargetData = UAbilitySystemBlueprintLibrary::AbilityTargetDataFromHitResult(HitResult);
+		float Damage = 0.0f;
+		
+		Damage = CalculateDamage(Context);
+		
+		ApplyDamageToTarget(TargetData, Damage);
+	}
+	ExecuteHitImpactCue(HitResult);
+}
+
+// void UPTWGA_Fire::ApplySpread(const FPTWFireConext Context)
+// {
+// 	FVector CameraLocation;
+// 	FRotator CameraRotation;
+// 	
+// 	FVector BaseAimDir = CameraRotation.Vector();
+// 	
+// 	float CurrentSpreadDegrees = Context.WeaponInst->GetCurrentSpread();
+// 	FVector SpreadAimDir = FMath::VRandCone(BaseAimDir, FMath::DegreesToRadians(CurrentSpreadDegrees));
+// 	
+// 	
+// 	Context.WeaponInst->AddSpread();
+// }

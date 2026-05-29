@@ -4,6 +4,7 @@
 #include "PTWWeaponAttributeSet.h"
 
 #include "Net/UnrealNetwork.h"
+#include "GameplayEffectExtension.h"
 
 UPTWWeaponAttributeSet::UPTWWeaponAttributeSet()
 {
@@ -33,7 +34,10 @@ void UPTWWeaponAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModC
 {
 	Super::PostGameplayEffectExecute(Data);
 	
-	
+	if (Data.EvaluatedData.Attribute == GetCurrentAmmoAttribute())
+	{
+		SetCurrentAmmo(FMath::Clamp(GetCurrentAmmo(), 0.0f, GetMaxAmmo()));
+	}
 }
 
 void UPTWWeaponAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue)
@@ -42,7 +46,7 @@ void UPTWWeaponAttributeSet::PostAttributeChange(const FGameplayAttribute& Attri
 	
 	if (Attribute == GetCurrentAmmoAttribute())
 	{
-		//SetCurrentAmmo(FMath::Clamp(GetCurrentAmmo(), 0, GetMaxAmmo()));
+		//SetCurrentAmmo(FMath::Clamp(GetCurrentAmmo(), 0.0f, GetMaxAmmo()));
 	}
 }
 

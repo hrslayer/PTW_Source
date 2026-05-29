@@ -65,6 +65,7 @@ public:
 
 	/* HUD */
 	void ShowHUD(TSubclassOf<UUserWidget> HUDClass);
+	FORCEINLINE UUserWidget* GetHUDWidgetInstance() const {return HUDWidget;}
 
 	/* 상시 존재 UI 생성 (랭킹보드) */
 	UUserWidget* CreatePersistentWidget(TSubclassOf<UUserWidget> WidgetClass, int32 ZOrder = 10);
@@ -80,6 +81,8 @@ public:
 	UFUNCTION()
 	void ShowDamageIndicator(const FVector& DamageCauserLocation);
 	void SetDamageIndicatorClass(TSubclassOf<UPTWDamageIndicator> InClass) { DamageIndicatorClass = InClass; }
+	/* 히트 인디케이터 */
+	void ShowHitIndicator(TSubclassOf<UUserWidget> WidgetClass, bool bHeadShot);
 
 	/* 채팅 */
 	void SetChatInputClass(TSubclassOf<UPTWChatInput> InClass) { ChatInputClass = InClass; }
@@ -99,7 +102,8 @@ public:
 
 	/* HUD 초기화 */
 	void TryInitializeHUDASC();
-
+	void TryInitializeHUDASC(UAbilitySystemComponent* ASC);
+	
 	void ApplyInputPolicy(EUIInputPolicy Policy);
 
 private:
@@ -134,6 +138,8 @@ private:
 	
 	/* ASC get 타이머 */
 	FTimerHandle ASCInitTimerHandle;
+
+	FTimerHandle HitIndicatorTimerHandle;
 
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UUserWidget> PopupWidgetClass;

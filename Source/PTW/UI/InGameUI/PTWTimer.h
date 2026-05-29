@@ -40,4 +40,8 @@ protected:
 	APTWGameState* PTWGameState;
 
 	FTimerHandle TimerHandle_InitGameState;
+
+private:
+	void BindGameStateDelegates();
+	void UnBindGameStateDelegates();
 };

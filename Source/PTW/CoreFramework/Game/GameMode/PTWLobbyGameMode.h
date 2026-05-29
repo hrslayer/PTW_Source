@@ -9,7 +9,7 @@
 
 class APTWPlayerState;
 class UPTWLobbyItemManager;
-class UPTWRoundEventManager;
+class UPTWRouletteEventManager;
 class APTWResultCharacter;
 struct FPTWMiniGameMapRow;
 /**
@@ -62,7 +62,7 @@ class PTW_API APTWLobbyGameMode : public APTWGameMode
 public:
 	APTWLobbyGameMode();
 
-	void ApplyLobbyItem(APTWPlayerState* Buyer, const FName ItemId, APTWPlayerState* WinTarget = nullptr);
+	void ApplyLobbyItem(APTWPlayerState* Buyer, const FName ItemId);
 	void AddChaosItemEntry(const FPTWChaosItemEntry& Entry);
 	void AddGold(APTWPlayerState* PlayerState, int32 Amount);
 	
@@ -98,8 +98,10 @@ protected:
 
 	virtual void EndTimer() override;
 
+	virtual bool IsWinner(APTWPlayerState* InPlayerState = nullptr) override;
+	
 	UPROPERTY(VisibleAnywhere)
-	TObjectPtr<UPTWRoundEventManager> RoundEventManager;
+	TObjectPtr<UPTWRouletteEventManager> RouletteEventManager;
 
 	/** 로비 아이템 관리 및 적용 */
 	UPROPERTY()
@@ -109,16 +111,19 @@ private:
 	
 	void StartRoulette();
 	void EndGame();
-	void ReturnToMainMenu();
+	//void ReturnToMainMenu();
+
+	//* 미니 게임 종료 후 로비에서 골드 지급 */ 
+	void GiveLobbyGold();
 	
 	/** 로비 아이템 데이터 테이블 */
 	UPROPERTY(EditDefaultsOnly)
 	TObjectPtr<UDataTable> LobbyItemDataTable;
 	
-	UPROPERTY(EditDefaultsOnly, Category = "Test")
-	bool bSkipFirstLobby = false;
+	//UPROPERTY(EditDefaultsOnly, Category = "Test")
+	//bool bSkipFirstLobby = false;
 	
-	bool bIsFirstLobby;
+	//bool bIsFirstLobby;
 	bool bWaitingTimerStarted = false;
 
 	FTimerHandle LoadingDelayTimer;

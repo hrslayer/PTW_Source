@@ -1,6 +1,11 @@
 ﻿#include "PTWDeliveryControllerComponent.h"
 
+#include "AbilitySystemComponent.h"
+#include "Components/PostProcessComponent.h"
+#include "CoreFramework/PTWPlayerCharacter.h"
 #include "CoreFramework/PTWPlayerController.h"
+#include "GAS/PTWDeliveryAttributeSet.h"
+#include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "UI/PTWUISubsystem.h"
 #include "UI/MiniGame/Delivery/PTWBatterLevelWidget.h"
@@ -8,7 +13,7 @@
 
 UPTWDeliveryControllerComponent::UPTWDeliveryControllerComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
 	SetIsReplicatedByDefault(true);
 }
 
@@ -47,7 +52,16 @@ void UPTWDeliveryControllerComponent::GetLifetimeReplicatedProps(TArray<FLifetim
 void UPTWDeliveryControllerComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	
+	AActor* FoundActor = UGameplayStatics::GetActorOfClass(GetWorld(), APostProcessVolume::StaticClass());
+	
+	if (FoundActor)
+	{
+		PostProcessComp = Cast<APostProcessVolume>(FoundActor);
+	}
 }
+
+
 
 void UPTWDeliveryControllerComponent::ClientRPC_ShowCountDownWidget_Implementation()
 {
@@ -113,6 +127,83 @@ void UPTWDeliveryControllerComponent::OnRep_CurrentRank(int32 OldRank)
 	{
 		RaceRankUpdate();
 	}
+}
+
+void UPTWDeliveryControllerComponent::UpdateVignette(float DeltaTime)
+{
+	if (APTWPlayerController* PC  = Cast<APTWPlayerController>(GetOwner()))
+	{
+		if (APTWPlayerCharacter* PTWCharacter = Cast<APTWPlayerCharacter>(PC->GetPawn()))
+		{
+			UAbilitySystemComponent* ASC = PTWCharacter->GetAbilitySystemComponent();
+			if (!ASC) return;
+			
+			const UPTWDeliveryAttributeSet* DeliveryAttribute = Cast<UPTWDeliveryAttributeSet>(ASC->GetAttributeSet(UPTWDeliveryAttributeSet::StaticClass()));
+			if (!DeliveryAttribute) return;
+			
+			float BatteryPercent = DeliveryAttribute->GetBatteryLevel();
+			
+			if (!PostProcessComp) return;
+			
+			float TargetWeight = FMath::GetMappedRangeValueClamped(FVector2D(0.0f, 1.0f), FVector2D(1.0f, 0.0f), BatteryPercent);
+			
+			float CurrentWeight = PostProcessComp->BlendWeight;
+			float NewWeight = FMath::FInterpTo(CurrentWeight, TargetWeight, DeltaTime, 5.0f);
+
+			static bool bSettingsInitialized = false;
+			if (!bSettingsInitialized && PostProcessComp)
+			{
+				FPostProcessSettings& Settings = PostProcessComp->Settings;
+				
+				// 색조 설정
+				Settings.bOverride_ColorSaturation = true;
+				Settings.ColorSaturation = FVector4(0.0f, 0.0f, 0.0f, 1.0f);
+				
+				// 대비 설정
+				Settings.bOverride_ColorContrast = true;
+				Settings.ColorContrast = FVector4(1.5f, 1.5f, 1.5f, 1.0f); 
+				
+				// 비네트 설정
+				Settings.bOverride_VignetteIntensity = true;
+				Settings.VignetteIntensity = 1.0f; 
+
+				bSettingsInitialized = true;
+			}
+
+			PostProcessComp->BlendWeight = NewWeight;
+			
+		}
+	}
+}
+
+void UPTWDeliveryControllerComponent::CheckAndPlayLowBatteryNotification()
+{
+	if (APTWPlayerController* PC  = Cast<APTWPlayerController>(GetOwner()))
+	{
+		if (APTWPlayerCharacter* PTWCharacter = Cast<APTWPlayerCharacter>(PC->GetPawn()))
+		{
+			UAbilitySystemComponent* ASC = PTWCharacter->GetAbilitySystemComponent();
+			if (!ASC) return;
+			
+			const UPTWDeliveryAttributeSet* DeliveryAttribute = Cast<UPTWDeliveryAttributeSet>(ASC->GetAttributeSet(UPTWDeliveryAttributeSet::StaticClass()));
+			if (!DeliveryAttribute) return;
+			
+			float BatteryPercent = DeliveryAttribute->GetBatteryLevel();
+			
+			if (DeliveryHUDWidgetInstance)
+			{
+				DeliveryHUDWidgetInstance->PlayAnimationLowNotificationWidget(BatteryPercent <= 0.2f);
+			}
+		}
+	}
+}
+
+void UPTWDeliveryControllerComponent::TickComponent(float DeltaTime, enum ELevelTick TickType,
+                                                    FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	UpdateVignette(DeltaTime);
+	CheckAndPlayLowBatteryNotification();
 }
 
 

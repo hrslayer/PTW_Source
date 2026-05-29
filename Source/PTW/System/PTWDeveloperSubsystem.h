@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
-#include "Minigame/PTWMiniGameMapRow.h"
+#include "MiniGame/PTWMiniGameMapRow.h"
 #include "PTWDeveloperSubsystem.generated.h"
 
 

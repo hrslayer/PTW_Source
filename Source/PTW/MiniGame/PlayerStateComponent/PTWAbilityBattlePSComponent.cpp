@@ -31,6 +31,11 @@ void UPTWAbilityBattlePSComponent::GetLifetimeReplicatedProps(TArray<class FLife
 	
 }
 
+void UPTWAbilityBattlePSComponent::Server_SetCurrentDraft_Implementation(const TArray<FName>& NewDraft)
+{
+	SetCurrentDraft(NewDraft);
+}
+
 void UPTWAbilityBattlePSComponent::AddDraftCharges()
 {
 	if (GetOwner() && GetOwner()->HasAuthority())

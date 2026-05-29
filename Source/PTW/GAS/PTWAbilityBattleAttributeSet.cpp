@@ -96,18 +96,6 @@ void UPTWAbilityBattleAttributeSet::HandleDamaged(UAbilitySystemComponent* Targe
 	UWorld* World = GetWorld();
 	if (!World) return;
 	
-	//bCanHealthRegen = false;
-	bCanShieldRegen = false;
-
-	//World->GetTimerManager().ClearTimer(HealthRegenLoopTimer);
-	World->GetTimerManager().ClearTimer(ShieldRegenLoopTimer);
-		
-	//World->GetTimerManager().ClearTimer(HealthRegenTimer);
-	World->GetTimerManager().ClearTimer(ShieldRegenTimer);
-	
-	//World->GetTimerManager().SetTimer(HealthRegenTimer, this, &UPTWAbilityBattleAttributeSet::StartHealthRegen, HealthRegenDelay);
-	World->GetTimerManager().SetTimer(ShieldRegenTimer, this, &UPTWAbilityBattleAttributeSet::StartShieldRegen, ShieldRegenDelay);
-	
 	const float LifeStealPer = SourceSet->GetLifeSteal();
 	const float HealPowerPer = SourceSet->GetHealPower();
 	if (LifeStealPer <= 0.f) return;
@@ -119,6 +107,24 @@ void UPTWAbilityBattleAttributeSet::HandleDamaged(UAbilitySystemComponent* Targe
 		EGameplayModOp::Additive,
 		Heal
 	);
+}
+
+void UPTWAbilityBattleAttributeSet::HandleHit()
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+	
+	//bCanHealthRegen = false;
+	bCanShieldRegen = false;
+
+	//World->GetTimerManager().ClearTimer(HealthRegenLoopTimer);
+	World->GetTimerManager().ClearTimer(ShieldRegenLoopTimer);
+		
+	//World->GetTimerManager().ClearTimer(HealthRegenTimer);
+	World->GetTimerManager().ClearTimer(ShieldRegenTimer);
+	
+	//World->GetTimerManager().SetTimer(HealthRegenTimer, this, &UPTWAbilityBattleAttributeSet::StartHealthRegen, HealthRegenDelay);
+	World->GetTimerManager().SetTimer(ShieldRegenTimer, this, &UPTWAbilityBattleAttributeSet::StartShieldRegen, ShieldRegenDelay);
 }
 
 void UPTWAbilityBattleAttributeSet::ApplyHealthRegen()

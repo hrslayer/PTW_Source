@@ -27,11 +27,11 @@ protected:
 	virtual void BeginPlay() override;
 	
 	UFUNCTION()
-	void OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
+	virtual void OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 	
 	bool ExplosionOverlapSetter(TArray<FOverlapResult>& OverlapResults);
 	
-	void ApplyExplosionDamage(TArray<FOverlapResult>& OverlapResults, float FinalDamage);
+	virtual void ApplyExplosionDamage(TArray<FOverlapResult>& OverlapResults, float FinalDamage);
 	
 	bool CheckingBlock(FHitResult& ObstarcleHit, const FVector ExplosionLocation, const AActor* HitActor);
 	
@@ -48,5 +48,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Explosion")
 	float ExplosionRad;
 	
-	
+	UPROPERTY(EditAnywhere, Category = "Fire|Settings")
+	bool bIsSelfTarget;
 };

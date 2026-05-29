@@ -4,10 +4,13 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "GameplayTagContainer.h"
 #include "PTWPortalCount.generated.h"
 
 class UTextBlock;
 class APTWGameState;
+class UAbilitySystemComponent;
+
 /**
  * 
  */
@@ -19,18 +22,31 @@ class PTW_API UPTWPortalCount : public UUserWidget
 public:
 	virtual void NativeDestruct() override;
 
+	void InitWithASC(UAbilitySystemComponent* AbilitySystemComponent);
+
 	void InitializeGameState();
 
 	UFUNCTION()
 	void UpdatePortalText(int32 Current, int32 Required);
 
 protected:
+	void OnPortalTagChanged(const FGameplayTag Tag, int32 NewCount);
+
 	UPROPERTY(meta = (BindWidget))
 	UTextBlock* PortalCountText;
 
 private:
+	void BindASCDelegates();
+	void UnBindASCDelegates();
+	void UnBindAllDelegates();
+
+	UPROPERTY()
+	TObjectPtr<UAbilitySystemComponent> ASC;
+
 	UPROPERTY()
 	APTWGameState* PTWGameState;
+
+	FDelegateHandle PortalTagHandle;
 
 	FTimerHandle PortalCount_InitGameState;
 

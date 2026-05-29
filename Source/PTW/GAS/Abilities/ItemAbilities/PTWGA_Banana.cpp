@@ -57,6 +57,4 @@ void UPTWGA_Banana::ApplyItemEffect()
 		float LaunchSpeed = 1500.f; 
 		SpawnedBanana->GetProjectileMovementComponent()->Velocity = LaunchDirection * LaunchSpeed;
 	}
-	
-	
 }

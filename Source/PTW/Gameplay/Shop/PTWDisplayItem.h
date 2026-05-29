@@ -22,7 +22,7 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	void InitDisplay(FName NewItemID);
+	void InitDisplay(FName NewItemID, bool bInGachaMode = false);
 	void SetParentShop(APTWShopNPC* Shop) { ParentShop = Shop; }
 
 	/* 상호작용 시 호출(구매 시도) */
@@ -41,6 +41,9 @@ protected:
 
 	void UpdateItemVisuals();
 
+	UFUNCTION()
+	void OnRep_GachaMode();
+
 protected:
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UStaticMeshComponent> ItemMesh;
@@ -58,4 +61,10 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UUserWidget> ItemInfoWidgetClass;
+
+	UPROPERTY(ReplicatedUsing = OnRep_GachaMode, VisibleInstanceOnly)
+	bool bIsGachaMode;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Visual|Config")
+	TObjectPtr<UStaticMesh> GachaBoxMesh;
 };

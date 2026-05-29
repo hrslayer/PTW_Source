@@ -38,6 +38,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon")
 	float FireRate;
 	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon") // 탄퍼짐 강도
+	float SpreadIncrement = 0.5f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon") // 탄퍼짐 회복 속도
+	float SpreadRecoveryRate = 2.0f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon") // 최대 탄퍼짐
+	float MaxSpread = 5.0f;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon") // 최소 탄퍼짐
+	float MinSpread = 0.0f;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon")
 	TMap<FGameplayTag, UAnimMontage*> AnimMap;
 

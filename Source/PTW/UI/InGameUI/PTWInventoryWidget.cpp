@@ -5,6 +5,8 @@
 #include "UI/InGameUI/PTWItemSlot.h"
 
 #include "Components/UniformGridPanel.h"
+#include "Components/TextBlock.h"
+
 #include "CoreFramework/PTWPlayerState.h"
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/GameStateBase.h"
@@ -16,10 +18,15 @@
 
 void UPTWInventoryWidget::InitPS()
 {
-	if (APTWPlayerState* PS = GetOwningPlayerState<APTWPlayerState>())
+	APTWPlayerState* PS = GetOwningPlayerState<APTWPlayerState>();
+	if (!PS) return;
+
+	if (CachedPlayerState.IsValid())
 	{
-		CachedPlayerState = PS;
+		UnbindDelegates();
 	}
+
+	CachedPlayerState = PS;
 
 	BindDelegates();
 }
@@ -38,15 +45,10 @@ void UPTWInventoryWidget::NativeDestruct()
 
 void UPTWInventoryWidget::BindDelegates()
 {
-	/* 중복 바인딩 방지 */
-	UnbindDelegates();
-
 	/* 델리게이트 바인딩 */
 	if (CachedPlayerState.IsValid())
 	{
 		CachedPlayerState->OnPlayerDataUpdated.AddDynamic(this, &UPTWInventoryWidget::OnInventoryUpdated);
-
-		UE_LOG(LogTemp, Warning, TEXT("InventoryWidget Binding delegates"));
 		
 		/* 최신 데이터로 초기화 */
 		OnInventoryUpdated(CachedPlayerState->GetPlayerData());
@@ -59,6 +61,7 @@ void UPTWInventoryWidget::UnbindDelegates()
 	if (CachedPlayerState.IsValid())
 	{
 		CachedPlayerState->OnPlayerDataUpdated.RemoveDynamic(this, &UPTWInventoryWidget::OnInventoryUpdated);
+		CachedPlayerState = nullptr;
 	}
 }
 
@@ -119,6 +122,9 @@ void UPTWInventoryWidget::OnInventoryUpdated(const FPTWPlayerData& NewData)
 			break;
 		}
 	}
+
+	/* 그리드 크기에 따른 텍스트 가시성 업데이트 */
+	UpdateTextVisibility();
 }
 
 void UPTWInventoryWidget::CreateSlot(UUniformGridPanel* TargetGrid, UPTWItemDefinition* ItemDef, int32 Index)
@@ -140,4 +146,25 @@ void UPTWInventoryWidget::CreateSlot(UUniformGridPanel* TargetGrid, UPTWItemDefi
 	int32 ColIdx = Index / MaxRowsPerColumn;
 
 	TargetGrid->AddChildToUniformGrid(NewSlot, RowIdx, ColIdx);
+}
+
+void UPTWInventoryWidget::UpdateTextVisibility()
+{
+	if (WeaponText && WeaponGrid)
+	{
+		ESlateVisibility NewVisibility = (WeaponGrid->GetChildrenCount() > 0) ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+		WeaponText->SetVisibility(NewVisibility);
+	}
+
+	if (ActiveItemText && ActiveItemGrid)
+	{
+		ESlateVisibility NewVisibility = (ActiveItemGrid->GetChildrenCount() > 0) ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+		ActiveItemText->SetVisibility(NewVisibility);
+	}
+
+	if (PassiveItemText && PassiveItemGrid)
+	{
+		ESlateVisibility NewVisibility = (PassiveItemGrid->GetChildrenCount() > 0) ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+		PassiveItemText->SetVisibility(NewVisibility);
+	}
 }

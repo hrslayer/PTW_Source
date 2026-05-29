@@ -83,7 +83,7 @@ void UPTWGSDelegateWidget::HandleGamePhaseChanged(EPTWGamePhase Phase)
 	{
 		switch (Phase)
 		{
-		case EPTWGamePhase::PostGameLobby:
+		case EPTWGamePhase::Lobby:
 			InventoryWidget->SetVisibility(ESlateVisibility::Visible);
 			MiniGameInventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
 			break;
@@ -115,7 +115,7 @@ void UPTWGSDelegateWidget::HandleRoulettePhaseChanged(FPTWRouletteData RouletteD
 
 	if (MiniGameTitle)
 	{
-		if (Phase == EPTWGamePhase::PostGameLobby)
+		if (Phase == EPTWGamePhase::Lobby)
 		{
 			MiniGameTitle->UpdateTitleByRoulette(RouletteData);
 		}

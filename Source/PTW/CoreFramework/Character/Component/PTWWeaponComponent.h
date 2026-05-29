@@ -7,6 +7,9 @@
 #include "GameplayTagContainer.h"
 #include "PTWWeaponComponent.generated.h"
 
+class UPTWWeaponInstance;
+class UPTWWeaponData;
+class APTWPlayerController;
 class APTWWeaponActor;
 class UAnimMontage;
 
@@ -45,16 +48,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Weapon")
 	void ApplyRecoil();
 	UFUNCTION(BlueprintCallable, Category = "Weapon")
-	float PlayMontage1P(UAnimMontage* MontageToPlay);
+	float PlayMontage1P(UAnimMontage* MontageToPlay, float PlayRate = 1.0f);
 
 	UFUNCTION(BlueprintCallable, Category = "Weapon")
-	void PlayWeaponMontageByTag(FGameplayTag AnimTag);
+	void PlayWeaponMontageByTag(FGameplayTag AnimTag, float PlayRate = 1.0f);
+
+	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 protected:
 	UFUNCTION()
 	void OnRep_CurrentWeaponTag(const FGameplayTag& OldTag);
 	UFUNCTION()
 	void OnRep_CurrentWeapon(APTWWeaponActor* OldWeapon);
+	
+	void SetWeaponSpreadData();
 
 public:
 	UPROPERTY(ReplicatedUsing = OnRep_CurrentWeaponTag, VisibleInstanceOnly, Category = "Weapon")
@@ -63,4 +70,14 @@ public:
 	TMap<FGameplayTag, FWeaponPair> SpawnedWeapons;
 	UPROPERTY(BlueprintReadOnly, Category = "Weapon", ReplicatedUsing = OnRep_CurrentWeapon)
 	TObjectPtr<APTWWeaponActor> CurrentWeapon;
+	
+private:
+	UPROPERTY()
+	TObjectPtr<APTWPlayerController> OwnerPlayerController;
+	
+	UPROPERTY()
+	TObjectPtr<UPTWWeaponInstance> WeaponInstance;
+	
+	UPROPERTY()
+	TObjectPtr<UPTWWeaponData> WeaponData;
 };

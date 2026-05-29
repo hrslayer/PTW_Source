@@ -94,6 +94,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Projectile")
 	TSubclassOf<APTWProjectile> ProjectileClass;
 	
+	float MaxRange = 25000.0f;
+	
+	UPROPERTY(EditAnywhere, Category = "Fire|Settings")
+	bool bIsAutoFire;
+	
 protected:
 	virtual void PerformLineTrace(FHitResult& HitResult, APTWPlayerCharacter* PlayerCharacter);
 	virtual bool ValidateHitResult(FHitResult& HitResult);
@@ -116,9 +121,13 @@ protected:
 	
 	virtual void PlayEmptyClickCue();
 	
-private:
-	float MaxRange = 25000.0f;
+	virtual void PerformFireAction(const FPTWFireConext Context);
 	
+	// virtual void ApplySpread(const FPTWFireConext Context);
+
+private:
 	UPROPERTY(EditDefaultsOnly, Category = "IgnoreTag")
 	FGameplayTag IgnoreTag;
+	
+	bool bIsFirstShot = true;
 };

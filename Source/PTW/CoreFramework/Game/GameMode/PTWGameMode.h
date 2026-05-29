@@ -3,13 +3,20 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/GameMode.h"
+#include "ModularGameMode.h"
 #include "CoreFramework/Game/GameInstance/PTWGameInstance.h"
 #include "CoreFramework/Game/GameState/PTWGameData.h"
 #include "PTWGameMode.generated.h"
 
 
+class UPTWResultSequenceComponent;
+class UPTWScoreSubsystem;
+class APTWPlayerState;
 class APTWGameState;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnPreLogin, const FString&, Options, const FString&, Address, const FUniqueNetIdRepl&, UniqueId, FString&, ErrorMessage);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPostLogin, APlayerController*, NewPlayer);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLogout, AController*, ExitingController);
 
 /** 게임의 전체 흐름과 시작 조건을 관리하는 GameMode
 * - 플레이어 입장/퇴장 관리
@@ -17,41 +24,13 @@ class APTWGameState;
 * - 타이머 및 레벨 트래블 연계
 */
 UCLASS()
-class PTW_API APTWGameMode : public AGameMode
+class PTW_API APTWGameMode : public AModularGameMode
 {
 	GENERATED_BODY()
 
 public:
-	
 	APTWGameMode();
-
-	/** 타이머 종료 시 호출(타이머 정리 및 종료 후 처리 트리거) */
-	UFUNCTION()
-	virtual void EndTimer();
-protected:
-	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
-	/** 게임 월드 시작 시 초기 설정 및 GameState 참조 캐싱 */
-	virtual void InitGameState() override;
-	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
-	virtual void BeginPlay() override;
 	
-	/** 플레이어 로그인 시 호출(접속 인원/시작 조건 갱신) */
-	virtual void PostLogin(APlayerController* NewPlayer) override;
-
-	virtual void HandleStartingNewPlayer_Implementation(APlayerController* NewPlayer) override;
-	
-	/** 플레이어 로그아웃 시 호출(접속 인원/게임 진행 상태 갱신) */
-	virtual void Logout(AController* Exiting) override;
-
-	virtual void GetSeamlessTravelActorList(bool bToTransition, TArray<AActor*>& ActorList) override;;
-
-	virtual void PostSeamlessTravel() override;
-
-	/* 트래블 직전에 모든 클라에 로딩 정보 전달 */
-	void PrepareAllPlayersLoadingScreen(ELoadingScreenType Type, FName MapRowName);
-
-	virtual FString InitNewPlayer(APlayerController* NewPlayer, const FUniqueNetIdRepl& UniqueId, const FString& Options, const FString& Portal) override;
-public:
 	/** 모든 플레이어가 로딩되었는지 확인 */
 	void CheckAllPlayersLoaded();
 
@@ -70,7 +49,37 @@ public:
 
 	/* 외부에서 다음 트래블 맵을 강제로 설정하기 위한 함수 */
 	void SetTravelLevelName(const FString& InLevelName);
+	
+	/** 타이머 종료 시 호출(타이머 정리 및 종료 후 처리 트리거) */
+	UFUNCTION()
+	virtual void EndTimer();
 
+	virtual bool IsWinner(APTWPlayerState* InPlayerState = nullptr);
+protected:
+	/** 게임 월드 시작 시 초기 설정 및 GameState 참조 캐싱 */
+	virtual void InitGameState() override;
+	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	
+	/* 플레이어 로그인 시도 시 호출 */
+	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
+	
+	/** 플레이어 로그인 시 호출(접속 인원/시작 조건 갱신) */
+	virtual void PostLogin(APlayerController* NewPlayer) override;
+
+	virtual void HandleStartingNewPlayer_Implementation(APlayerController* NewPlayer) override;
+	
+	/** 플레이어 로그아웃 시 호출(접속 인원/게임 진행 상태 갱신) */
+	virtual void Logout(AController* Exiting) override;
+
+	virtual void GetSeamlessTravelActorList(bool bToTransition, TArray<AActor*>& ActorList) override;;
+
+	virtual void PostSeamlessTravel() override;
+
+	/* 트래블 직전에 모든 클라에 로딩 정보 전달 */
+	void PrepareAllPlayersLoadingScreen(ELoadingScreenType Type, FName MapRowName);
+	
 protected:
 	/** 지정한 시간(초) 기준으로 타이머를 시작 */
 	void StartTimer(float TimeDuration);
@@ -79,7 +88,7 @@ protected:
 	void ClearTimer();
 	
 	/** 설정된 TravelLevelName으로 레벨 이동 처리 */
-	void TravelLevel();
+	virtual void TravelLevel();
 
 	/** 플레이어를 시작 위치로 이동시키는 함수 */
 	void MovePlayerToStart(AController* Controller);
@@ -88,6 +97,11 @@ protected:
 	virtual void UpdateTimer();
 	
 	void SetInputBlock(bool bInputBlock);
+
+	// 로그인한 플레이어에게 Subsystem 저장 데이터를 적용
+	void ApplyPlayerGameDataFromSubsystem(AController* NewPlayer);
+
+	virtual void StartResultSequence();
 	
 	// 이동할 레벨 이름(TravelLevel에서 사용)
 	FString TravelLevelName;
@@ -107,16 +121,28 @@ protected:
 	int32 AllPlayer = 0;
 
 	FPTWGameData CachedGameData;
+	
+	UPROPERTY()
+	TObjectPtr<UPTWScoreSubsystem> ScoreSubsystem;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UPTWResultSequenceComponent> ResultSequenceComponent;
+	
+	
 private:
 	// 현재 라운드/플레이어 데이터를 Subsystem으로 저장
+	void SavePlayerGameData(APTWPlayerState* PlayerState);
 	void SaveGameDataToSubsystem();
-
-	// 로그인한 플레이어에게 Subsystem 저장 데이터를 적용
-	void ApplyPlayerDataFromSubsystem(AController* NewPlayer);
-
-	
 	
 	int32 CurrentRound;
-
 	
+public:
+	UPROPERTY(BlueprintAssignable, Category = "GameMode|Events")
+	FOnPreLogin OnPreLogin;
+	UPROPERTY(BlueprintAssignable, Category = "GameMode|Events")
+	FOnPostLogin OnPostLogin;
+	UPROPERTY(BlueprintAssignable, Category = "GameMode|Events")
+	FOnLogout OnPreLogout;
+	UPROPERTY(BlueprintAssignable, Category = "GameMode|Events")
+	FOnLogout OnPostLogout;
 };

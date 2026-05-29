@@ -29,6 +29,7 @@ public:
 
 	void OnMaxHealthChanged(const FOnAttributeChangeData& Data);
 	void HandleDamaged(UAbilitySystemComponent* Target, UAbilitySystemComponent* Source, float Damage);
+	void HandleHit();
 	
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Armor, Category = "AttributeBattle|Attributes")
 	FGameplayAttributeData Armor;

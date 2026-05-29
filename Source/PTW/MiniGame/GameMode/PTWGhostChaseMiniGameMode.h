@@ -8,6 +8,7 @@
 
 class UPTWItemDefinition;
 class UPTWGhostChaseControllerComponent;
+class UAbilitySystemComponent;
 
 /**
  * 
@@ -32,6 +33,9 @@ protected:
 	virtual void BeginPlay() override;
 
 	virtual void EndGame() override;
+
+	/* 데미지 바인딩 및 스탯 초기화를 위해 오버라이드 */
+	virtual void StartGame() override;
 
 	/* GameWaiting 단계: 10초 카운트다운 설정 */
 	virtual void WaitingToStartRound() override;
@@ -60,6 +64,11 @@ private:
 
 	/* 게임시작 메세지 */
 	void NotificateMessage();
+
+	// === 스탯 기록용 헬퍼 함수 ===
+	void AddStatValue(AController* Controller, EPTWResultStatName StatName, int32 Amount);
+	void BindDamageEvent();
+	void OnTrackedDamageApplied(UAbilitySystemComponent* TargetASC, UAbilitySystemComponent* SourceASC, float Damage);
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "GE")

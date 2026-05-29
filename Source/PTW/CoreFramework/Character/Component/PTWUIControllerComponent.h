@@ -8,10 +8,13 @@
 #include "UI/InGameUI/PTWNotificationWidget.h"
 #include "PTWUIControllerComponent.generated.h"
 
+class UPTWSpamAdMainWidget;
 class APTWPlayerController;
 class UPTWUISubsystem;
 class UUserWidget;
 class UPTWDevWidget;
+class APTWBombActor;
+class UPTWResultBoard;
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class PTW_API UPTWUIControllerComponent : public UActorComponent
@@ -39,8 +42,12 @@ public:
 	void UpdateTargetPOV(APawn* NewTarget);
 	void RefreshTargetViewHiddenActors();
 	void ShowDamageIndicator(FVector DamageCauserLocation);
-
+	void BuyVoteItem();
+	void UpdateCrossHairSpread(float DynamicSpread, float MaxSpread);
 	
+	UFUNCTION(Client, Reliable)
+	void Client_OpenPredictVoteUI();
+
 	/* 알림 위젯 */
 	UFUNCTION(Client, Reliable)
 	void Client_ShowNotification(const FNotificationData& Data);
@@ -61,6 +68,11 @@ public:
 	UFUNCTION(Client, Reliable)
 	void Client_FindGhostChaseComponent();
 
+	/* 미니게임 결과 데이터 전달 */
+	void ShowMiniGameResult(const TArray<FPTWMiniGameResultData>& InResultData, const TArray<FPTWMiniGameTopResultData>& InTopResultData);
+	
+	/** 스팸 광고 UI On/Off */
+	void ShowSpamAd(bool Boolean);
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -77,28 +89,7 @@ protected:
 	UFUNCTION()
 	void HandleGamePhaseChanged(EPTWGamePhase CurrentGamePhase);
 
-private:
-	UPROPERTY()
-	TObjectPtr<APTWPlayerController> OwnerPC;
-
-	UPROPERTY()
-	TObjectPtr<UPTWUISubsystem> UISubsystem;
-
-	UPROPERTY()
-	TObjectPtr<class APTWGameState> CachedGameState;
-
-	bool bAbleRankingBoard = false;
-	bool bAbleChat = false;
-	bool bKeyGuideOn = false;
-
-	UPROPERTY()
-	UPTWDevWidget* DevWidgetInstance;
-
-	FTimerHandle NameTagTimerHandle;
-	FTimerHandle GameStateBindRetryHandle;
-
-	UPROPERTY()
-	class UPTWGhostChaseControllerComponent* CachedGhostChaseComp;
+	void HandleOpenPredictVoteUI();
 
 public:
 	UPROPERTY(EditDefaultsOnly, Category = "UI|NameTag") 
@@ -110,8 +101,6 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category = "UI") 
 	TSubclassOf<class UPTWInGameHUD> HUDClass;
-	/*UPROPERTY(EditDefaultsOnly, Category = "UI")
-	TSubclassOf<UUserWidget> DelegateUI;*/
 	UPROPERTY(EditDefaultsOnly, Category = "UI") 
 	TSubclassOf<class UPTWRankingBoard> RankingBoardClass;
 	UPROPERTY(EditDefaultsOnly, Category = "UI") 
@@ -125,7 +114,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "UI|Timer") 
 	TSubclassOf<class UPTWGameStartTimer> GameStartTimerClass;
 	UPROPERTY(EditDefaultsOnly, Category = "UI|Roulette") 
-	TSubclassOf<UUserWidget> MapRouletteWidgetClass;
+	TSubclassOf<UUserWidget> RouletteWidgetClass;
+	/*UPROPERTY(EditDefaultsOnly, Category = "UI|Roulette")
+	TSubclassOf<UUserWidget> EventRouletteWidgetClass;*/
 	UPROPERTY(EditDefaultsOnly, Category = "UI") 
 	TSubclassOf<UUserWidget> KeyGuideWidgetClass;
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
@@ -134,4 +125,34 @@ public:
 	TSubclassOf<UUserWidget> SpectatorHUDClass;
 	UPROPERTY(EditAnywhere, Category = "UI") 
 	TSubclassOf<class UPTWDevWidget> DevWidgetClass;
+	UPROPERTY(EditAnywhere, Category = "UI")
+	TSubclassOf<UUserWidget> PredictWinVote;
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Result")
+	TSubclassOf<UPTWResultBoard> ResultBoardClass;
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UUserWidget> SpamAdMainWidgetClass;
+private:
+	UPROPERTY()
+	TObjectPtr<APTWPlayerController> OwnerPC;
+	UPROPERTY()
+	TObjectPtr<UPTWUISubsystem> UISubsystem;
+	UPROPERTY()
+	TObjectPtr<class APTWGameState> CachedGameState;
+	UPROPERTY()
+	TObjectPtr<UPTWResultBoard> ResultBoardInstance;
+	UPROPERTY()
+	TObjectPtr<UPTWSpamAdMainWidget> SpamAdMainInstance;
+	
+	bool bAbleRankingBoard = false;
+	bool bAbleChat = false;
+	bool bKeyGuideOn = false;
+
+	FTimerHandle NameTagTimerHandle;
+	FTimerHandle GameStateBindRetryHandle;
+
+	UPROPERTY()
+	UPTWDevWidget* DevWidgetInstance;
+
+	UPROPERTY()
+	class UPTWGhostChaseControllerComponent* CachedGhostChaseComp;
 };

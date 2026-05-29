@@ -34,10 +34,10 @@ void APTWDisplayItem::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	DOREPLIFETIME(APTWDisplayItem, ItemID);
 }
 
-void APTWDisplayItem::InitDisplay(FName NewItemID)
+void APTWDisplayItem::InitDisplay(FName NewItemID, bool bInGachaMode)
 {
 	ItemID = NewItemID;
-
+	bIsGachaMode = bInGachaMode;
 	UpdateItemVisuals();
 }
 
@@ -73,6 +73,12 @@ void APTWDisplayItem::OnInteract_Implementation(APawn* InstigatorPawn)
 
 FText APTWDisplayItem::GetInteractionKeyword_Implementation()
 {
+	if (bIsGachaMode)
+	{
+		FString ActionStr = FString::Printf(TEXT("F를 눌러 구매하기 (300 G) - 랜덤박스"));
+		return FText::FromString(ActionStr);
+	}
+	
 	FString ActionStr = FString::Printf(TEXT("F를 눌러 구매하기 (%d G)"), CachedPrice);
 	return FText::FromString(ActionStr);
 }
@@ -94,19 +100,42 @@ void APTWDisplayItem::OnRep_ItemID()
 	UpdateItemVisuals();
 }
 
+void APTWDisplayItem::OnRep_GachaMode()
+{
+	UpdateItemVisuals();
+}
+
 void APTWDisplayItem::UpdateItemVisuals()
 {
 	if (UPTWShopSubsystem* Sys = GetWorld()->GetSubsystem<UPTWShopSubsystem>())
 	{
 		CachedPrice = Sys->GetItemPrice(ItemID);
-		const FShopItemRow* Data = Sys->GetShopItemData(ItemID);
 
+		if (bIsGachaMode)
+		{
+			if (GachaBoxMesh)
+			{
+				ItemMesh->SetStaticMesh(GachaBoxMesh);
+			}
+
+			if (InfoWidget && ItemInfoWidgetClass)
+			{
+				InfoWidget->SetWidgetClass(ItemInfoWidgetClass);
+				if (UPTWItemInfoWidget* UI = Cast<UPTWItemInfoWidget>(InfoWidget->GetUserWidgetObject()))
+				{
+					//TODO : 랜덤박스라는 설명이 나오게해야함
+				}
+			}
+			return;
+		}
+
+
+		const FShopItemRow* Data = Sys->GetShopItemData(ItemID);
 		if (Data)
 		{
 			if (!Data->DisplayMesh.IsNull())
 				ItemMesh->SetStaticMesh(Data->DisplayMesh.LoadSynchronous());
 
-			// TODO : 위젯 정보 갱신
 			if (InfoWidget && ItemInfoWidgetClass)
 			{
 				InfoWidget->SetWidgetClass(ItemInfoWidgetClass);

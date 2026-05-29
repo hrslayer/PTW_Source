@@ -7,14 +7,20 @@
 #include "GameFramework/GameUserSettings.h"
 #include "PTWOptionsWidget.generated.h"
 
+class UComboBoxKey;
+class UVerticalBox;
 class UCheckBox;
 class UComboBoxString;
 class USlider;
 class UButton;
 class UWidgetSwitcher;
+class UHorizontalBox;
+class UDataTable;
+class UBorder;
 class USoundClass;
 class USoundMix;
 class UEditableText;
+class UPTWVoiceVolume;
 
 USTRUCT()
 struct FOptionSnapshot
@@ -34,14 +40,21 @@ struct FOptionSnapshot
 	int32 ShadingQuality;
 	int32 AntiAliasingQuality;
 	bool bVSync;
+	float FieldOfView = 90.f;
+	int32 MaxFrameRateIndex = 2;
+	bool bMotionBlur = false;
 
 	float MasterVolume = 1.f;
 	float BGMVolume = 1.f;
 	float SFXVolume = 1.f;
 	float UIVolume = 1.f;
+	float VoiceVolume = 1.f;
 
 	float MouseSensitivity = 1.f;
+	bool bInvertYAxis = false;
+	int32 CrosshairIndex = 0;
 
+	bool bIsPushToTalk = true;
 	FString SelectedLanguage;
 };
 /**
@@ -86,6 +99,14 @@ protected:
 	UComboBoxString* Combo_AntiAliasing; // 안티앨리어싱
 	UPROPERTY(meta = (BindWidget))
 	UCheckBox* CheckBox_VSync; // 수직동기화
+	UPROPERTY(meta = (BindWidget))
+	USlider* Slider_FOV; // 시야각
+	UPROPERTY(meta = (BindWidget))
+	UEditableText* ET_FOV; 
+	UPROPERTY(meta = (BindWidget))
+	UComboBoxString* Combo_FrameLimit; // 프레임제한
+	UPROPERTY(meta = (BindWidget))
+	UCheckBox* CheckBox_MotionBlur; // 모션블러
 	// 마스터볼륨
 	UPROPERTY(meta = (BindWidget))
 	USlider* Slider_MasterVolume;
@@ -104,11 +125,22 @@ protected:
 	USlider* Slider_UIVolume;
 	UPROPERTY(meta = (BindWidget))
 	UEditableText* ET_UIVolume;
-	// 마우스 감도
+	UPROPERTY(meta = (BindWidget)) // Voice
+	USlider* Slider_VoiceVolume;
 	UPROPERTY(meta = (BindWidget))
-	USlider* Slider_MouseSensitivity;
+	UEditableText* ET_VoiceVolume;
+	UPROPERTY(meta = (BindWidget))
+	UVerticalBox* Vertical_VoiceVolume;
+	// 게임세팅
+	UPROPERTY(meta = (BindWidget))
+	USlider* Slider_MouseSensitivity; // 마우스 감도
 	UPROPERTY(meta = (BindWidget))
 	UEditableText* ET_MouseSensitivity;
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UCheckBox> CheckBox_InvertY; // 마우스 상하반전
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
+	TObjectPtr<UHorizontalBox> CrosshairHorizontalBox; // 크로스헤어 선택
+
 	// 세이브 버튼
 	UPROPERTY(meta = (BindWidget))
 	UButton* Button_Save;
@@ -132,7 +164,13 @@ protected:
 	// 게임설정 버튼
 	UPROPERTY(meta = (BindWidget))
 	UButton* Button_Game;
-
+	// 보이스볼륨 도움말 버튼
+	UPROPERTY(meta = (BindWidget))
+	UButton* Button_VoiceHelp;
+	// 보이스 입력 모드 변경 선택지
+	UPROPERTY(meta = (BindWidget))
+	UComboBoxString* Combo_VoiceInputMode;
+	
 	/* 에디터에서 할당할 SoundMix */
 	UPROPERTY(EditAnywhere, Category = "Settings|Sound")
 	USoundMix* MasterSoundMix;
@@ -145,6 +183,11 @@ protected:
 	USoundClass* SFXSoundClass;
 	UPROPERTY(EditAnywhere, Category = "Settings|Sound")
 	USoundClass* UISoundClass;
+	UPROPERTY(EditAnywhere, Category = "Settings|Sound")
+	USoundClass* VoiceSoundClass;
+	/* 에디터에서 할당할 크로스헤어 목록 데이터 테이블 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Options | Crosshair")
+	TObjectPtr<UDataTable> CrosshairDataTable;
 
 private:
 	FOptionSnapshot InitialSnapshot; // 초기값 저장
@@ -155,19 +198,24 @@ private:
 	void PopulateResolutionList();
 	void PopulateQualityList();
 	void PopulateLanguageList();
+	void PopulateVoiceInputModeList();
+	void PopulateFrameLimitList();
+
 	void SetupLanguageData();
 	void InitializeUIFromCurrentSettings();
 	void CacheInitialSettings();
+
 	void UpdateDisplaySettings(); // 해상도, 창모드, VSync
 	void UpdateAudioSettings();   // 볼륨 전용
 	void UpdateInputSettings();   // 감도 전용
 	void UpdateScalabilitySettings(); // 그래픽 세부 항목 전용
 	void RestoreInitialSettings();
+
 	void BindEvents();
 	// 텍스트 입력값을 검증하고 슬라이더 및 텍스트 박스를 동기화하는 공통 함수
 	bool ValidateAndApplyTextEntry(const FText& InText, USlider* TargetSlider, UEditableText* TargetET, float MinValue, float MaxValue);
 	// 숫자 포맷팅
-	FText FormatFloatToText(float Value) const;
+	FText FormatFloatToText(float Value, bool bInt = false) const;
 
 	/* 설정 변경 이벤트 */
 
@@ -182,6 +230,18 @@ private:
 
 	UFUNCTION()
 	void OnVSyncChanged(bool bChecked);
+
+	UFUNCTION()
+	void OnFOVChanged(float Value);
+
+	UFUNCTION()
+	void OnFOVTextCommitted(const FText& Text, ETextCommit::Type CommitMethod);
+
+	UFUNCTION()
+	void OnFrameLimitChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+
+	UFUNCTION()
+	void OnMotionBlurChanged(bool bChecked);
 
 	UFUNCTION()
 	void OnMasterVolumeChanged(float Value);
@@ -199,13 +259,19 @@ private:
 	void OnUIVolumeChanged(float Value);
 	UFUNCTION()
 	void OnUIVolumeTextCommitted(const FText& Text, ETextCommit::Type CommitMethod);
-
+	UFUNCTION()
+	void OnVoiceVolumeChanged(float Value);
+	UFUNCTION()
+	void OnVoiceVolumeTextCommitted(const FText& Text, ETextCommit::Type CommitMethod);
+	
 	UFUNCTION()
 	void OnMouseSensitivityChanged(float Value);
 	UFUNCTION()
 	void OnSensitivityCaptureEnd();
 	UFUNCTION()
 	void OnMouseSensitivityTextCommitted(const FText& Text, ETextCommit::Type CommitMethod);
+	UFUNCTION()
+	void OnInvertYChanged(bool bIsChecked);
 
 	UFUNCTION()
 	void OnLanguageChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
@@ -216,6 +282,9 @@ private:
 	UFUNCTION()
 	void OnClickedCancel();
 
+	UFUNCTION()
+	void OnClickedVoiceHelp();
+	
 	/* 카테고리 전환 */
 
 	UFUNCTION()
@@ -227,6 +296,21 @@ private:
 	UFUNCTION()
 	void OnClickedGame();
 
+	/* 크로스헤어 */
+	// 리스트 빌드
+	void BuildCrosshairListDirect();
+	// 내부 보더(또는 버튼)가 클릭되었을 때 호출할 함수
+	UFUNCTION()
+	void OnCrosshairSlotClicked();
+	// 현재 옵션 창에서 임시 선택 중인 크로스헤어 인덱스
+	int32 CurrentSelectedCrosshairIndex = 0;
+	// 테두리(하이라이트) 색상을 실시간으로 껐다 켜기 위해 생성된 보더들을 보관하는 배열
+	UPROPERTY()
+	TArray<TObjectPtr<UBorder>> CreatedSlotBorders;
+
 	// 언어 설정에서 코드와 이름을 매핑하기 위한 맵
 	TMap<FString, FString> LanguageMap;
+
+	// 프레임 레이트 값 매핑 리스트
+	TArray<float> FrameRateValues;
 };

@@ -35,8 +35,46 @@ void UPTWMiniGameInventory::NativeConstruct()
 
 void UPTWMiniGameInventory::NativeDestruct()
 {
+	UnBindInventoryDelegates();
+
+	Super::NativeDestruct();
+}
+
+void UPTWMiniGameInventory::InitInventory(UPTWInventoryComponent* InInventory)
+{
+	if (!InInventory) return;
+
+	// 기존 컴포넌트 바인딩이 있다면 먼저 해제 (재호출 시 중복 방지)
 	if (InventoryComp)
 	{
+		UnBindInventoryDelegates();
+	}
+
+	InventoryComp = InInventory;
+
+	// 인벤토리 컴포넌트 델리게이트 바인딩
+	BindInventoryDelegates();
+
+	RefreshInventory();
+}
+
+void UPTWMiniGameInventory::BindInventoryDelegates()
+{
+	if (InventoryComp)
+	{
+		InventoryComp->OnInventoryChanged.RemoveAll(this);
+		InventoryComp->OnInventoryChanged.AddUObject(this, &ThisClass::RefreshInventory);
+	}
+}
+
+void UPTWMiniGameInventory::UnBindInventoryDelegates()
+{
+	if (InventoryComp)
+	{
+		// 메인 인벤토리 델리게이트 해제
+		InventoryComp->OnInventoryChanged.RemoveAll(this);
+
+		// 개별 액티브 아이템들에 걸린 델리게이트도 전수 조사하여 해제
 		for (auto Item : InventoryComp->GetAllItems())
 		{
 			if (UPTWActiveItemInstance* Active = Cast<UPTWActiveItemInstance>(Item))
@@ -44,41 +82,26 @@ void UPTWMiniGameInventory::NativeDestruct()
 				Active->OnItemDepleted.RemoveAll(this);
 			}
 		}
+
+		InventoryComp = nullptr;
 	}
-	Super::NativeDestruct();
-}
 
-void UPTWMiniGameInventory::InitInventory(UPTWInventoryComponent* InInventory)
-{
-	InventoryComp = InInventory;
-
-	if (InventoryComp)
+	// 상태 전환 타이머도 함께 정리
+	if (GetWorld())
 	{
-		InventoryComp->OnInventoryChanged
-			.AddUObject(this, &ThisClass::RefreshInventory);
+		GetWorld()->GetTimerManager().ClearTimer(IdleTimerHandle);
 	}
-
-	RefreshInventory();
-
-	/* 로그용 */
-	APTWPlayerState* PS = GetOwningPlayerState<APTWPlayerState>();
-
-	UE_LOG(LogTemp, Warning, TEXT("[PTWMiniGameInventory] %s 플레이어 InitInventory 완료."),
-		PS ? *PS->GetPlayerName() : TEXT("Unknown"));
 }
 
 void UPTWMiniGameInventory::RefreshInventory()
 {
-	/* 로그용 */
-	APTWPlayerState* PS = GetOwningPlayerState<APTWPlayerState>();
-
-	UE_LOG(LogTemp, Warning, TEXT("[PTWMiniGameInventory] %s 플레이어 RefreshInventory 호출됨."),
-		PS ? *PS->GetPlayerName() : TEXT("Unknown"));
-
 	if (!InventoryComp) return;
 
 	const TArray<TObjectPtr<UPTWItemInstance>>& Items =
 		InventoryComp->GetAllItems();
+
+	const TArray<TObjectPtr<UPTWWeaponInstance>>& WeaponArr =
+		InventoryComp->GetWeaponArray();
 
 	TArray<UPTWItemInstance*> WeaponItems;
 	TArray<UPTWItemInstance*> PassiveItems;
@@ -88,17 +111,25 @@ void UPTWMiniGameInventory::RefreshInventory()
 	{
 		if (!Item) continue;
 
-		if (Item->IsA(UPTWWeaponInstance::StaticClass()))
+		/*if (Item->IsA(UPTWWeaponInstance::StaticClass()))
 		{
 			WeaponItems.Add(Item);
-		}
-		else if (Item->IsA(UPTWActiveItemInstance::StaticClass()))
+		}*/
+		if (Item->IsA(UPTWActiveItemInstance::StaticClass()))
 		{
 			ActiveItem = Item;
 		}
 		else if (Item->IsA(UPTWPassiveItemInstance::StaticClass()))
 		{
 			PassiveItems.Add(Item);
+		}
+	}
+
+	for (UPTWWeaponInstance* WeaponInst : WeaponArr)
+	{
+		if (WeaponInst)
+		{
+			WeaponItems.Add(WeaponInst);
 		}
 	}
 
@@ -112,6 +143,9 @@ void UPTWMiniGameInventory::SetupWeapons(const TArray<UPTWItemInstance*>& Weapon
 	if (!WeaponGrid) return;
 
 	WeaponGrid->ClearChildren();
+	WeaponSlots.Empty();
+
+	int32 CurrentSelectedIdx = InventoryComp->GetCurrentSlotIndex();
 
 	for (int32 i = 0; i < WeaponItems.Num(); i++)
 	{
@@ -127,6 +161,10 @@ void UPTWMiniGameInventory::SetupWeapons(const TArray<UPTWItemInstance*>& Weapon
 		GridSlot->SetColumn(i);
 
 		ItemSlot->SetItemInstance(Item);
+		ItemSlot->SetSlotNumber(i + 1);
+
+		bool bIsCurrentSelected = (i == CurrentSelectedIdx);
+		ItemSlot->SetHighlight(bIsCurrentSelected);
 
 		if (AbilitySystemComponent)
 		{
@@ -140,18 +178,15 @@ void UPTWMiniGameInventory::SetupWeapons(const TArray<UPTWItemInstance*>& Weapon
 				}
 			}
 		}
+
+		WeaponSlots.Add(ItemSlot);
 	}
+	SwitchToActiveState();
 }
 
 void UPTWMiniGameInventory::SetupActive(UPTWItemInstance* ActiveItem)
 {
 	if (!ActiveItemSlot) return;
-
-	/* 로그용 */
-	APTWPlayerState* PS = GetOwningPlayerState<APTWPlayerState>();
-
-	UE_LOG(LogTemp, Warning, TEXT("[PTWMiniGameInventory] %s 플레이어 SetupActive 함수 호출됨."),
-		PS ? *PS->GetPlayerName() : TEXT("Unknown"));
 
 	if (!IsValid(ActiveItem))
 	{
@@ -228,6 +263,17 @@ void UPTWMiniGameInventory::SetupPassives(
 		GridSlot->SetColumn(Col);
 
 		ItemSlot->SetItemInstance(Item);
+
+		if (AbilitySystemComponent)
+		{
+			if (UPTWItemDefinition* Def = Item->GetItemDef())
+			{
+				if (Def->CooldownTag.IsValid())
+				{
+					ItemSlot->InitCooldown(AbilitySystemComponent, Def->CooldownTag);
+				}
+			}
+		}
 	}
 }
 
@@ -238,4 +284,25 @@ UPTWMiniGameItemSlot* UPTWMiniGameInventory::CreateSlot()
 	return CreateWidget<UPTWMiniGameItemSlot>(
 		GetOwningPlayer(),
 		ItemSlotClass);
+}
+
+void UPTWMiniGameInventory::SwitchToActiveState()
+{
+	for (auto WeaponSlot : WeaponSlots)
+	{
+		WeaponSlot->SetWeaponDisplayMode(true);
+	}
+
+	// 기존 타이머가 있다면 취소하고 새로 5초 설정
+	GetWorld()->GetTimerManager().ClearTimer(IdleTimerHandle);
+	GetWorld()->GetTimerManager().SetTimer(IdleTimerHandle, this, &UPTWMiniGameInventory::SwitchToIdleState, 5.0f, false);
+}
+
+void UPTWMiniGameInventory::SwitchToIdleState()
+{
+	// 모든 무기 슬롯의 아이콘/이름을 숨기고 번호만 유지
+	for (auto WeaponSlot : WeaponSlots)
+	{
+		WeaponSlot->SetWeaponDisplayMode(false);
+	}
 }

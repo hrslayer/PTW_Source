@@ -1,21 +1,16 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
-
 #include "CoreMinimal.h"
-#include "GameFramework/GameMode.h"
-#if WITH_GAMELIFT
-#include "GameLiftServerSDK.h"
-#endif
+#include "ModularGameMode.h"
 #include "PTWServerEntryGameMode.generated.h"
+
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInitializeGameLiftServer);
+
 /**
  * 
  */
-
-DECLARE_LOG_CATEGORY_EXTERN(GameServerLog, Log, All);
-
 UCLASS()
-class PTW_API APTWServerEntryGameMode : public AGameMode
+class PTW_API APTWServerEntryGameMode : public AModularGameMode
 {
 	GENERATED_BODY()
 
@@ -24,9 +19,7 @@ public:
 	
 protected:
 	virtual void BeginPlay() override;
-private:
-#if WITH_GAMELIFT
-	void InitGameLift();
-	TSharedPtr<FProcessParameters> ProcessParameters;
-#endif
+	
+public:
+	FOnInitializeGameLiftServer OnInitializeGameLiftServer;
 };

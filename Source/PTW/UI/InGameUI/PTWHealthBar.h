@@ -32,6 +32,9 @@ protected:
 private:
 	/* 델리게이트 연결 */
 	void BindGASDelegates(UAbilitySystemComponent* ASC);
+	/* 델리게이트 해제 */
+	void UnBindGASDelegates();
+
 	/* 델리게이트 : 현재체력 변경 감지 */
 	void OnHealthAttributeChanged(const FOnAttributeChangeData& Data);
 	/* 델리게이트 : 최대체력 변경 감지 */

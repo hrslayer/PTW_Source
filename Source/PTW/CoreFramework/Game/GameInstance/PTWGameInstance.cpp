@@ -1,13 +1,17 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+﻿#include "CoreFramework/Game/GameInstance/PTWGameInstance.h"
 
-
-#include "CoreFramework/Game/GameInstance/PTWGameInstance.h"
+#include "ModularNames.h"
+#include "ModularPlayerState.h"
 #include "MoviePlayer.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/GameFrameworkComponentManager.h"
 #include "MiniGame/PTWMiniGameMapRow.h"
 #include "UI/LoadingScreen/PTWLoadingMiniGame.h"
 #include "UI/LoadingScreen/PTWLoadingWidgetBase.h"
 #include "CoreFramework/PTWGameUserSettings.h"
+#include "CoreFramework/PTWPlayerState.h"
+#include "System/PTWSteamSessionSubsystem.h"
+
 
 UPTWGameInstance::UPTWGameInstance(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -36,8 +40,62 @@ void UPTWGameInstance::Init()
 		MasterSoundClass,
 		BGMSoundClass,
 		SFXSoundClass,
-		UISoundClass
+		UISoundClass,
+		VoiceSoundClass
 	);
+	
+	if (UGameFrameworkComponentManager* ComponentManager = GetSubsystem<UGameFrameworkComponentManager>())
+	{
+		PlayerStateExtensionHandle = ComponentManager->AddExtensionHandler(
+			APTWPlayerState::StaticClass(),
+			UGameFrameworkComponentManager::FExtensionHandlerDelegate::CreateUObject(this, &ThisClass::HandlePlayerStateExtension));
+	}
+}
+
+void UPTWGameInstance::Shutdown()
+{
+	FWorldDelegates::OnPostWorldInitialization.RemoveAll(this);
+	PlayerStateExtensionHandle.Reset();
+	
+	Super::Shutdown();
+}
+
+void UPTWGameInstance::HandlePlayerStateExtension(AActor* Receiver, FName EventName)
+{
+	if (APTWPlayerState* PS = Cast<APTWPlayerState>(Receiver))
+	{
+		const FString UniqueId = PS->GetUniqueId().IsValid() ? PS->GetUniqueId().ToString() : TEXT("");
+		const FString PlayerName = PS->GetPlayerName();
+		
+		if (EventName.IsEqual(ModularNames::NAME_ReplicatedActorReady))
+		{
+			if (!LevelPlayerIds.Contains(UniqueId))
+			{
+				LevelPlayerIds.Add(UniqueId);
+			}
+			OnLevelPlayerConnected.Broadcast(UniqueId);
+			
+			if (!SessionPlayerIds.Contains(UniqueId))
+			{
+				SessionPlayerIds.Add(UniqueId);
+			}
+			if (!SessionPlayerNames.Contains(UniqueId))
+			{
+				SessionPlayerNames.Add(UniqueId, FString());
+			}
+			SessionPlayerNames[UniqueId] = PlayerName;
+			OnSessionPlayerConnected.Broadcast(UniqueId);
+		}
+		else if (EventName.IsEqual(UGameFrameworkComponentManager::NAME_ReceiverRemoved))
+		{
+			LevelPlayerIds.Remove(UniqueId);
+			OnLevelPlayerDisconnected.Broadcast(UniqueId);
+
+			SessionPlayerIds.Remove(UniqueId);
+			SessionPlayerNames.Remove(UniqueId);
+			OnSessionPlayerDisconnected.Broadcast(UniqueId);
+		}
+	}
 }
 
 void UPTWGameInstance::PrepareLoadingScreen(ELoadingScreenType InType, FName InMapRowName)
@@ -113,5 +171,13 @@ void UPTWGameInstance::StopLoadingScreen()
 	if (GetMoviePlayer()->IsMovieCurrentlyPlaying())
 	{
 		GetMoviePlayer()->StopMovie();
+	}
+}
+
+void UPTWGameInstance::LeaveGameSession()
+{
+	if (UPTWSteamSessionSubsystem* SteamSessionSubsystem = UPTWSteamSessionSubsystem::Get(this))
+	{
+		SteamSessionSubsystem->DestroySession();	
 	}
 }

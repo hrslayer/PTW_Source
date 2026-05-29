@@ -6,6 +6,8 @@
 #include "Blueprint/UserWidget.h"
 #include "PTWItemInfoWidget.generated.h"
 
+class UTextBlock;
+class UImage;
 /**
  * 
  */
@@ -23,15 +25,24 @@ protected:
 
 	/* 이름 */
 	UPROPERTY(meta = (BindWidget))
-	class UTextBlock* Text_ItemName;
+	UTextBlock* Text_ItemName;
+	/* 아이콘 */
+	UPROPERTY(meta = (BindWidget))
+	UImage* Image_ItemIcon;
+	/* 카테고리 */
+	UPROPERTY(meta = (BindWidget))
+	UTextBlock* Text_Category;
+	/* 아이템 타입 */
+	UPROPERTY(meta = (BindWidget))
+	UTextBlock* Text_ItemType;
 	/* 가격 */
 	UPROPERTY(meta = (BindWidget))
-	class UTextBlock* Text_Price;
+	UTextBlock* Text_Price;
 	UPROPERTY(meta = (BindWidgetOptional))
-	class UTextBlock* Text_PriceDelta;
+	UTextBlock* Text_PriceDelta;
 	/* 설명 */
 	UPROPERTY(meta = (BindWidget))
-	class UTextBlock* Text_Description;
+	UTextBlock* Text_Description;
 
 	UPROPERTY()
 	FName ItemID;

@@ -33,6 +33,14 @@ public:
 
 	void ResetCooldownUI();
 
+	// 슬롯 번호 설정
+	void SetSlotNumber(int32 Number);
+
+	// 모드 전환 (true: 전체 표시, false: 번호만 표시)
+	void SetWeaponDisplayMode(bool bShowFull);
+
+	void SetHighlight(bool bIsSelected);
+
 protected:
 
 	virtual void NativeDestruct() override;
@@ -70,4 +78,10 @@ private:
 	FDelegateHandle CooldownTagDelegateHandle;
 
 	FTimerHandle CooldownUpdateTimer;
+
+	/* 무기 전용 */
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UTextBlock> SlotNumberText; 
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UTextBlock> WeaponNameText;
 };

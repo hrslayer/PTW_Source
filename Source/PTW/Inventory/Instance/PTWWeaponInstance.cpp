@@ -73,6 +73,18 @@ int32 UPTWWeaponInstance::GetMaxAmmo()
 	return 0;
 }
 
+int32 UPTWWeaponInstance::GetCurrentAmmo()
+{
+	if (APTWPlayerCharacter* PlayerCharacter = GetItemInstanceOwner())
+	{
+		if (UAbilitySystemComponent* ASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(PlayerCharacter))
+		{
+			return ASC->GetNumericAttribute(UPTWWeaponAttributeSet::GetCurrentAmmoAttribute());
+		}
+	}
+	return 0;
+}
+
 APTWPlayerCharacter* UPTWWeaponInstance::GetItemInstanceOwner()
 {
 	UPTWInventoryComponent* OwnerComp = Cast<UPTWInventoryComponent>(GetOuter());
@@ -90,6 +102,25 @@ APTWPlayerCharacter* UPTWWeaponInstance::GetItemInstanceOwner()
 
 void UPTWWeaponInstance::CopyProperties(UPTWWeaponInstance& CopyInst)
 {
-	CurrentAmmo = CopyInst.GetMaxAmmo();
+	CurrentAmmo = GetWeaponData()->MaxAmmo;
 	bAlreadyUsing = CopyInst.bAlreadyUsing;
+}
+
+void UPTWWeaponInstance::AddSpread()
+{
+	UPTWWeaponData* WeaponData = GetWeaponData();
+	if (!WeaponData) return;
+	
+	CurrentSpread = FMath::Clamp(CurrentSpread +WeaponData->SpreadIncrement,
+		WeaponData->MinSpread, WeaponData->MaxSpread);
+}
+
+void UPTWWeaponInstance::RecoverSpread(float DeltaTime)
+{
+	UPTWWeaponData* WeaponData = GetWeaponData();
+	if (!WeaponData) return;
+	
+	CurrentSpread = FMath::Clamp(CurrentSpread - (WeaponData->SpreadRecoveryRate * DeltaTime), 
+								 WeaponData->MinSpread, 
+								 WeaponData->MaxSpread);
 }

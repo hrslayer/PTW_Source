@@ -6,6 +6,10 @@
 #include "Gameplay/Shop/PTWShopNPC.h"
 #include "Gameplay/Shop/PTWShopSpot.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "CoreFramework/PTWPlayerState.h"
+#include "PTWGameplayTag/GameplayTags.h"
+#include "CoreFramework/PTWPlayerController.h"
+#include "CoreFramework/Game/GameState/PTWGameState.h"
 
 void UPTWShopSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -54,18 +58,61 @@ void UPTWShopSubsystem::UnregisterShopSpot(APTWShopSpot* Spot)
 
 void UPTWShopSubsystem::InitializeShopsForRound(FGameplayTag NextMinigameTag, FGameplayTag RoundEventTag)
 {
-	if (ShopSpots.Num() == 0 || !ShopNPCClass)
+	if (ShopSpots.Num() == 0 || !ShopNPCClass) return;
+
+	if (APTWGameState* GS = GetWorld()->GetGameState<APTWGameState>())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[ShopSubsystem] Error: No ShopSpots or NPCClass is missing."));
+		GS->SetCurrentRoundEventTag(RoundEventTag);
+	}
+
+	for (const auto& NPC : ActiveNPCs) { if (IsValid(NPC)) NPC->Destroy(); }
+	ActiveNPCs.Empty();
+	GlobalItemStock.Empty();
+	GetWorld()->GetTimerManager().ClearAllTimersForObject(this);
+
+	CurrentCrowdFundingAmount = 0;
+	bIsShopOpenedByFunding = false;
+
+	if (RoundEventTag.MatchesTag(GameplayTags::Event::Round::Shop::CrowdFunding))
+	{
+		GetWorld()->GetTimerManager().SetTimer(CrowdFundingTimerHandle, this, &UPTWShopSubsystem::OnCrowdFundingFailed, 30.0f, false);
 		return;
 	}
 
-	CurrentRoundEventTag = RoundEventTag;
+	ReShuffleShops();
+}
 
-	for (const auto& NPC : ActiveNPCs)
+int32 UPTWShopSubsystem::GetItemPrice(FName ItemID) const
+{
+	if (GetCurrentRoundEventTag().MatchesTag(GameplayTags::Event::Round::Shop::Gacha))
 	{
-		if (IsValid(NPC)) NPC->Destroy();
+		return 300;
 	}
+
+	if (const FShopItemRow* ItemData = CachedShopItems.Find(ItemID))
+	{
+		float FinalPrice = (float)ItemData->BasePrice * GetPriceMultiplier();
+		return FMath::Max(1, FMath::RoundToInt(FinalPrice));
+	}
+	return 999999;
+}
+
+float UPTWShopSubsystem::GetPriceMultiplier() const
+{
+	if (GetCurrentRoundEventTag().MatchesTag(GameplayTags::Event::Round::Shop::Inflation))
+	{
+		return 3.0f;
+	}
+	if (GetCurrentRoundEventTag().MatchesTag(GameplayTags::Event::Round::Shop::FlashSale))
+	{
+		return 0.5f;
+	}
+	return 1.0f;
+}
+
+void UPTWShopSubsystem::ReShuffleShops()
+{
+	for (const auto& NPC : ActiveNPCs) { if (IsValid(NPC)) NPC->Destroy(); }
 	ActiveNPCs.Empty();
 
 	TArray<EShopCategory> SelectedCategories = SelectShopCategories(ShopSpots.Num());
@@ -79,88 +126,78 @@ void UPTWShopSubsystem::InitializeShopsForRound(FGameplayTag NextMinigameTag, FG
 	}
 
 	int32 SpawnCount = FMath::Min(SelectedCategories.Num(), ShuffledSpots.Num());
-
 	for (int32 i = 0; i < SpawnCount; ++i)
 	{
 		APTWShopSpot* Spot = ShuffledSpots[i];
 		EShopCategory Category = SelectedCategories[i];
 
 		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-
 		APTWShopNPC* NewNPC = GetWorld()->SpawnActor<APTWShopNPC>(ShopNPCClass, Spot->GetActorTransform(), Params);
 
 		if (NewNPC)
 		{
-			TArray<FName> ShopItems = SelectItemsForShop(Category, NextMinigameTag);
+			bool bIsGacha = GetCurrentRoundEventTag().MatchesTag(GameplayTags::Event::Round::Shop::Gacha);
 
-			NewNPC->InitializeShop(Category, ShopItems, Spot->GetItemSpawnTransforms());
+			TArray<FName> ShopItems = SelectItemsForShop(Category, FGameplayTag());
 
+			if (GetCurrentRoundEventTag().MatchesTag(GameplayTags::Event::Round::Shop::OpenRun))
+			{
+				for (FName Item : ShopItems)
+				{
+					if (!GlobalItemStock.Contains(Item)) GlobalItemStock.Add(Item, 2);
+				}
+			}
+
+			NewNPC->InitializeShop(Category, ShopItems, Spot->GetItemSpawnTransforms(), bIsGacha);
 			ActiveNPCs.Add(NewNPC);
+			NewNPC->SetAssignedSpot(Spot);
 		}
 	}
-}
 
-int32 UPTWShopSubsystem::GetItemPrice(FName ItemID) const
-{
-	if (const FShopItemRow* ItemData = CachedShopItems.Find(ItemID))
+	if (GetCurrentRoundEventTag().MatchesTag(GameplayTags::Event::Round::Shop::FlashSale))
 	{
-		float FinalPrice = (float)ItemData->BasePrice * GetPriceMultiplier();
-
-		return FMath::Max(1, FMath::RoundToInt(FinalPrice));
+		if (UWorld* World = GetWorld())
+		{
+			for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+			{
+				if (APTWPlayerController* PC = Cast<APTWPlayerController>(It->Get()))
+				{
+					FText MessageText = FText::FromString(TEXT("상점이 변경되었습니다!"));
+					PC->SendMessage(MessageText, ENotificationPriority::Normal, 2.0f, false);
+				}
+			}
+		}
+		
+		float RandomDelay = FMath::RandRange(3.0f, 10.0f);
+		GetWorld()->GetTimerManager().SetTimer(FlashSaleTimerHandle, this, &UPTWShopSubsystem::ReShuffleShops, RandomDelay, false);
 	}
-	return 999999; // 에러코드
-}
-
-float UPTWShopSubsystem::GetPriceMultiplier() const
-{
-	//// 1. [인플레이션] 물가 폭등 (2배)
-	//// 태그: Event.Round.Economy.Inflation
-	//if (CurrentRoundEventTag.MatchesTag(FGameplayTag::RequestGameplayTag("Event.Round.Economy.Inflation")))
-	//{
-	//	return 2.0f;
-	//}
-	//// 2. [경제 대공황] 물가 대폭락 (50% 할인)
-	//// 태그: Event.Round.Economy.Depression
-	//if (CurrentRoundEventTag.MatchesTag(FGameplayTag::RequestGameplayTag("Event.Round.Economy.Depression")))
-	//{
-	//	return 0.5f;
-	//}
-	
-	return 1.0f;
 }
 
 TArray<EShopCategory> UPTWShopSubsystem::SelectShopCategories(int32 TargetCount)
 {
 	TArray<EShopCategory> Result;
+	TArray<EShopCategory> Pool;
 
-	TArray<EShopCategory> Pool = {
-		EShopCategory::Attack,
-		EShopCategory::Defense,
-		EShopCategory::Utility
-	};
+	if (GetCurrentRoundEventTag().MatchesTag(GameplayTags::Event::Round::Shop::ExtremeDilemma))
+	{
+		Pool = { EShopCategory::Attack, EShopCategory::Lobby };
+	}
+	else
+	{
+		Pool = { EShopCategory::Attack, EShopCategory::Defense, EShopCategory::Utility, EShopCategory::Chaos, EShopCategory::Lobby };
+	}
 
 	if (TargetCount <= 0) return Result;
 
 	for (EShopCategory Type : Pool)
 	{
-		if (Result.Num() < TargetCount)
-		{
-			Result.Add(Type);
-		}
+		if (Result.Num() < TargetCount) Result.Add(Type);
 	}
 
 	while (Result.Num() < TargetCount)
 	{
 		int32 RandIdx = FMath::RandRange(0, Pool.Num() - 1);
 		Result.Add(Pool[RandIdx]);
-	}
-
-	int32 LastIndex = Result.Num() - 1;
-	for (int32 i = 0; i <= LastIndex; ++i)
-	{
-		int32 Index = FMath::RandRange(i, LastIndex);
-		Result.Swap(i, Index);
 	}
 
 	return Result;
@@ -199,4 +236,96 @@ TArray<FName> UPTWShopSubsystem::SelectItemsForShop(EShopCategory Category, FGam
 const FShopItemRow* UPTWShopSubsystem::GetShopItemData(FName ItemID) const
 {
 	return CachedShopItems.Find(ItemID);
+}
+
+bool UPTWShopSubsystem::CanAffordItem(APTWPlayerState* BuyerPS, int32 Price) const
+{
+	if (!BuyerPS) return false;
+
+	if (GetCurrentRoundEventTag().MatchesTag(GameplayTags::Event::Round::Shop::Debt))
+	{
+		return true;
+	}
+
+	return true;
+}
+
+bool UPTWShopSubsystem::TryPurchaseItem(APTWPlayerState* BuyerPS, APTWShopNPC* TargetNPC, FName ItemID)
+{
+	if (!BuyerPS || !TargetNPC) return false;
+
+	UE_LOG(LogTemp, Error, TEXT("[ShopSubsystem] 아이템 구매 시도!"));
+
+	if (GetCurrentRoundEventTag().MatchesTag(GameplayTags::Event::Round::Shop::OpenRun))
+	{
+		int32& CurrentCount = ShopPurchaseCounts.FindOrAdd(TargetNPC);
+
+		if (CurrentCount >= 2)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[ShopEvent] 이 상점은 이미 매진되어 사라졌습니다."));
+			return false;
+		}
+
+		CurrentCount++;
+
+		if (CurrentCount >= 2)
+		{
+			UE_LOG(LogTemp, Error, TEXT("[ShopEvent] 상점 이용 제한 도달! 상점을 철수합니다."));
+
+			ActiveNPCs.Remove(TargetNPC);
+			TargetNPC->Destroy();
+		}
+	}
+
+	if (GetCurrentRoundEventTag().MatchesTag(GameplayTags::Event::Round::Shop::FlashSale))
+	{
+		if (APTWShopSpot* Spot = TargetNPC->GetAssignedSpot())
+		{
+			BuyerPS->Client_AddDepletedSpot(Spot);
+		}
+	}
+
+	if (GetCurrentRoundEventTag().MatchesTag(GameplayTags::Event::Round::Shop::RiskPurchase))
+	{
+
+	}
+
+	return true;
+}
+
+void UPTWShopSubsystem::AddCrowdFunding(int32 Amount, APTWPlayerState* Donator)
+{
+	if (bIsShopOpenedByFunding) return;
+
+	CurrentCrowdFundingAmount += Amount;
+
+	if (CurrentCrowdFundingAmount >= 1000)
+	{
+		bIsShopOpenedByFunding = true;
+		GetWorld()->GetTimerManager().ClearTimer(CrowdFundingTimerHandle);
+
+		UE_LOG(LogTemp, Warning, TEXT("[ShopEvent] 펀딩 1000G 달성! 상점 강제 오픈!"));
+		ReShuffleShops();
+	}
+}
+
+void UPTWShopSubsystem::OnCrowdFundingFailed()
+{
+	if (!bIsShopOpenedByFunding)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[ShopEvent] 펀딩 실패! 모인 재화(%d)는 증발하며 상점은 열리지 않습니다."), CurrentCrowdFundingAmount);
+		CurrentCrowdFundingAmount = 0;
+	}
+}
+
+FGameplayTag UPTWShopSubsystem::GetCurrentRoundEventTag() const
+{
+	if (UWorld* World = GetWorld())
+	{
+		if (APTWGameState* GS = World->GetGameState<APTWGameState>())
+		{
+			return GS->GetCurrentRoundEventTag();
+		}
+	}
+	return FGameplayTag::EmptyTag;
 }

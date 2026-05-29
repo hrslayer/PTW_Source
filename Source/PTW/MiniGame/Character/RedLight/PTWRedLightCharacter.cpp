@@ -19,9 +19,11 @@
 #include "EnhancedInputComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/AudioComponent.h"
-#include "PTWGamePlayTag/GameplayTags.h" 
+#include "PTWGameplayTag/GameplayTags.h" 
 #include "Inventory/PTWInventoryComponent.h"
 #include "CoreFramework/PTWPlayerController.h"
+#include "EnhancedInputSubsystems.h"
+#include "CoreFramework/PTWInputComponent.h"
 
 #define LOCTEXT_NAMESPACE "RedLightCharacter"
 
@@ -94,8 +96,25 @@ void APTWRedLightCharacter::SetupPlayerInputComponent(class UInputComponent* Pla
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
+		{
+			Subsystem->ClearAllMappings();
+
+			if (TaggerMappingContext)
+			{
+				Subsystem->AddMappingContext(TaggerMappingContext, 0);
+			}
+		}
+	}
+
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
+		if (LookAction)
+		{
+			EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &APTWPlayerCharacter::Look);
+		}
 		if (ChargeAction)
 		{
 			EnhancedInputComponent->BindAction(ChargeAction, ETriggerEvent::Started, this, &APTWRedLightCharacter::OnSpacePressed);
@@ -106,6 +125,26 @@ void APTWRedLightCharacter::SetupPlayerInputComponent(class UInputComponent* Pla
 			EnhancedInputComponent->BindAction(ZoomAction, ETriggerEvent::Started, this, &APTWRedLightCharacter::StartZoom);
 			EnhancedInputComponent->BindAction(ZoomAction, ETriggerEvent::Completed, this, &APTWRedLightCharacter::StopZoom);
 		}
+		if (EquipFirstWeaponAction && EquipSecondWeaponAction)
+		{
+			EnhancedInputComponent->BindAction(EquipFirstWeaponAction, ETriggerEvent::Started, this, &APTWPlayerCharacter::EquipFirstWeapon);
+			EnhancedInputComponent->BindAction(EquipSecondWeaponAction, ETriggerEvent::Started, this, &APTWPlayerCharacter::EquipSecondWeapon);
+		}
+		if (UseActiveItemAction)
+		{
+			EnhancedInputComponent->BindAction(UseActiveItemAction, ETriggerEvent::Started, this, &APTWPlayerCharacter::UseActiveItem);
+		}
+
+		UPTWInputComponent* PTWInputComp = CastChecked<UPTWInputComponent>(PlayerInputComponent);
+
+		TArray<uint32> BindHandles;
+		PTWInputComp->BindAbilityActions(
+			InputConfig,
+			this,
+			&ThisClass::Input_AbilityInputTagPressed,
+			&ThisClass::Input_AbilityInputTagReleased,
+			BindHandles
+		);
 	}
 }
 
@@ -195,8 +234,10 @@ void APTWRedLightCharacter::CheckAndGiveWeapon(APlayerState* NewPlayerState)
 			{
 				if (TaggerWeaponDef)
 				{
-					ItemManager->SpawnSingleItem(PS, TaggerWeaponDef);
-					UE_LOG(LogTemp, Warning, TEXT("[RedLight] 초기화 완료! 술래에게 무기(%s) 지급 성공!"), *TaggerWeaponDef->GetName());
+					UPTWItemSpawnManager* SpawnManager = GetWorld()->GetSubsystem<UPTWItemSpawnManager>();
+					check(SpawnManager);
+
+					SpawnManager->SpawnWeaponActor(this, TaggerWeaponDef, TaggerWeaponDef->WeaponTag);;
 
 					if (UPTWInventoryComponent* InvComp = PS->GetInventoryComponent())
 					{

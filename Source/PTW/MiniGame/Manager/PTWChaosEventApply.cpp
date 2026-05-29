@@ -6,12 +6,16 @@
 #include "GameFramework/PlayerState.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemInterface.h"
+#include "EngineUtils.h"
 #include "CoreFramework/Game/GameState/PTWGameState.h"
-#include "MiniGame/Data/PTWChaosItemDefinition.h"
+#include "Event/PTWChaosItemDefinition.h"
+#include "Event/ChaosEvent/PTWChaosEventBase.h"
 
 
 void UPTWChaosEventApply::InitDefinition(UPTWChaosItemDefinition* InDefinition)
 {
+	if (!InDefinition) return;
+	
 	Definition = InDefinition;
 }
 
@@ -23,15 +27,37 @@ void UPTWChaosEventApply::SetStackCount(int32 Count)
 
 void UPTWChaosEventApply::ApplyChaosEvent(APTWGameState* GameState)
 {
+	if (!GameState || !Definition) return;
+	
+	if (Definition->ChaosEventClass)
+	{
+		UPTWChaosEventBase* CurrentEventClass = NewObject<UPTWChaosEventBase>(this,Definition->ChaosEventClass);
+		CurrentEventClass->ApplyEvent(GameState);
+	}
 	if (Definition->ChaosAbilityClass)
 	{
 		ApplyChaosAbilityClass(GameState);
 	}
+	if (!Definition->ChaosWeatherDA.IsNull())  
+	{
+		ApplyChaosWeather(GameState);
+	}
+	
+	GameState->AddCurrentChaosEvent(Definition->ChaosEventTag);
 }
 
-void UPTWChaosEventApply::ChaosEventEnd()
+void UPTWChaosEventApply::ChaosEventEnd(APTWGameState* GameState)
 {
+	if (Definition->ChaosEventClass)
+	{
+		UPTWChaosEventBase* CurrentEventClass = NewObject<UPTWChaosEventBase>(this,Definition->ChaosEventClass);
+		CurrentEventClass->EndEvent(GameState);
+	}
+	
 	ChaosAbilityEnd();
+	ChaosWeatherEnd(GameState);
+
+	GameState->ResetCurrentChaosEvent();
 }
 
 void UPTWChaosEventApply::ApplyChaosAbilityClass(APTWGameState* GameState)
@@ -66,4 +92,42 @@ void UPTWChaosEventApply::ChaosAbilityEnd()
 	}
 	ApplyAbilityHandles.Empty();
 }
+
+void UPTWChaosEventApply::ApplyChaosWeather(APTWGameState* GameState)
+{
+	if (!IsValid(Definition) || Definition->ChaosWeatherDA.IsNull()) return;
+
+	AActor* Sky = GameState->SkyActor;
+	if (!IsValid(Sky)) return;
+
+	UFunction* GetWeatherFunc = Sky->FindFunction(TEXT("GetCurrentWeather"));
+	if (!GetWeatherFunc) return;
+
+	struct { UObject* ReturnValue; } GetParams{};
+	Sky->ProcessEvent(GetWeatherFunc, &GetParams);
+	PreviousWeather = GetParams.ReturnValue;
+
+	UObject* WeatherDA = Definition->ChaosWeatherDA.LoadSynchronous();
+	if (!WeatherDA) return;
+
+	UFunction* SetWeatherFunc = Sky->FindFunction(TEXT("SetWeather"));
+	if (!SetWeatherFunc) return;
+	
+	struct { UObject* WeatherDA; } SetParams{ WeatherDA };
+	Sky->ProcessEvent(SetWeatherFunc, &SetParams);
+}
+
+void UPTWChaosEventApply::ChaosWeatherEnd(APTWGameState* GameState)
+{
+	AActor* Sky = GameState->SkyActor;
+	if (!IsValid(Sky)) return;
+	
+	UFunction* SetWeatherFunc = Sky->FindFunction(TEXT("SetWeather"));
+	if (!SetWeatherFunc) return;
+	
+	struct { UObject* WeatherDA; } SetParams{ PreviousWeather };
+	Sky->ProcessEvent(SetWeatherFunc, &SetParams);
+}
+
+
 

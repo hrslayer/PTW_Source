@@ -23,6 +23,8 @@ public:
 	void InitCountDownWidget();
 	void UpdateCountDownWidgetCount(int32 Count);
 	void UpdateRank(int32 CurRank, int32 Total);
+	void PlayAnimationLowNotificationWidget(bool bIsLowBattery);
+	
 	
 public:
 	UPROPERTY(meta=(BindWidget))
@@ -33,4 +35,13 @@ public:
 	
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UPTWRankingWidget> RankingWidget;
+	
+	UPROPERTY(Transient, meta = (BindWidgetAnim))
+	TObjectPtr<UWidgetAnimation> LowBatteryNotificationAnim;
+	
+	UPROPERTY(Transient, meta = (BindWidgetAnim))
+	TObjectPtr<UWidgetAnimation> LowBatteryNotificationOutAnim;
+	
+	bool bIsLow = false;
+	
 };

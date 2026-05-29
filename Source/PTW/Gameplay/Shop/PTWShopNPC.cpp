@@ -6,6 +6,7 @@
 #include "Net/UnrealNetwork.h"
 #include "CoreFramework/PTWPlayerState.h"
 #include "Kismet/GameplayStatics.h"
+#include "Gameplay/Shop/PTWShopSpot.h"
 
 APTWShopNPC::APTWShopNPC()
 {
@@ -38,18 +39,78 @@ void APTWShopNPC::BeginPlay()
 	}
 }
 
+void APTWShopNPC::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	for (TObjectPtr<APTWDisplayItem> Item : DisplayItems)
+	{
+		if (IsValid(Item))
+		{
+			Item->Destroy();
+		}
+	}
+	DisplayItems.Empty();
+
+	Super::EndPlay(EndPlayReason);
+}
+
 void APTWShopNPC::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(APTWShopNPC, ShopCategory);
 	DOREPLIFETIME(APTWShopNPC, DisplayItems);
+	DOREPLIFETIME(APTWShopNPC, bIsGachaMode);
+	DOREPLIFETIME(APTWShopNPC, AssignedSpot);
 }
 
-void APTWShopNPC::InitializeShop(EShopCategory InCategory, const TArray<FName>& InItemIDs, const TArray<FTransform>& DisplayLocs)
+void APTWShopNPC::SetAssignedSpot(APTWShopSpot* InSpot)
+{
+	AssignedSpot = InSpot;
+
+	if (HasAuthority() && GetNetMode() != NM_DedicatedServer)
+	{
+		CheckShopAvailability();
+	}
+}
+
+void APTWShopNPC::CheckShopAvailability()
+{
+	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	if (!PC) return;
+
+	APTWPlayerState* PS = PC->GetPlayerState<APTWPlayerState>();
+	if (!PS || !AssignedSpot) return;
+
+	bool bIsDepleted = false;
+
+	if (PS->LocalDepletedSpots.Contains(AssignedSpot))
+	{
+		bIsDepleted = true;
+	}
+	else
+	{
+		for (APTWShopSpot* Spot : PS->LocalDepletedSpots)
+		{
+			if (Spot && Spot->GetName() == AssignedSpot->GetName())
+			{
+				bIsDepleted = true;
+				PS->LocalDepletedSpots.Add(AssignedSpot);
+				break;
+			}
+		}
+	}
+
+	if (bIsDepleted)
+	{
+		CloseShop();
+	}
+}
+
+void APTWShopNPC::InitializeShop(EShopCategory InCategory, const TArray<FName>& InItemIDs, const TArray<FTransform>& DisplayLocs, bool bInGachaMode)
 {
 	if (!HasAuthority()) return;
 
 	ShopCategory = InCategory;
+	bIsGachaMode = bInGachaMode;
 
 	ApplyCategoryVisuals();
 
@@ -64,23 +125,11 @@ void APTWShopNPC::InitializeShop(EShopCategory InCategory, const TArray<FName>& 
 		APTWDisplayItem* Item = GetWorld()->SpawnActor<APTWDisplayItem>(DisplayItemClass, SpawnTM, Params);
 		if (Item)
 		{
-			Item->InitDisplay(InItemIDs[i]);
 			Item->SetParentShop(this);
+			Item->InitDisplay(InItemIDs[i], bIsGachaMode);
 			DisplayItems.Add(Item);
 		}
 	}
-}
-
-
-void APTWShopNPC::CheckShopAvailability()
-{
-	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
-	if (!PC) return;
-
-	APTWPlayerState* PS = PC->GetPlayerState<APTWPlayerState>();
-	if (!PS) return;
-
-	//TODO : 로컬 클라이언트에서 닫은 상점인지 체크하기
 }
 
 void APTWShopNPC::CloseShop()
@@ -114,8 +163,24 @@ void APTWShopNPC::OnRep_ShopCategory()
 	ApplyCategoryVisuals();
 }
 
+void APTWShopNPC::OnRep_GachaMode()
+{
+	ApplyCategoryVisuals();
+}
+
+void APTWShopNPC::OnRep_AssignedSpot()
+{
+	CheckShopAvailability();
+}
+
 void APTWShopNPC::ApplyCategoryVisuals()
 {
+	if (bIsGachaMode && GachaMaterial)
+	{
+		if (StandMesh) StandMesh->SetMaterial(0, GachaMaterial);
+		return;
+	}
+	
 	if (TObjectPtr<UMaterialInterface>* FoundMat = CategoryMaterialMap.Find(ShopCategory))
 	{
 		if (*FoundMat)

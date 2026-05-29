@@ -16,6 +16,7 @@
 #include "InGameUI/PTWMiniGameInventory.h"
 #include "InGameUI/PTWNotificationWidget.h"
 #include "InGameUI/PTWMiniGameTitle.h"
+#include "InGameUI/PTWRoundEventTitle.h"
 #include "InGameUI/PTWPortalCount.h"
 #include "Inventory/PTWInventoryComponent.h"
 
@@ -43,15 +44,12 @@ void UPTWInGameHUD::InitializeUI(UAbilitySystemComponent* ASC)
 	/* 미니게임인벤토리 위젯 초기화 */
 	if (MiniGameInventoryWidget)
 	{
-		if (APTWPlayerState* PS = GetOwningPlayerState<APTWPlayerState>())
+		if (UPTWInventoryComponent* Inventory = GetInventoryComponentFromASC(ASC))
 		{
-			if (UPTWInventoryComponent* Inventory =	PS->FindComponentByClass<UPTWInventoryComponent>())
-			{
-				MiniGameInventoryWidget->InitInventory(Inventory);
-			}
+			MiniGameInventoryWidget->InitInventory(Inventory);
 		}
 	}
-	if (PortalCount) PortalCount->InitializeGameState();
+	if (PortalCount) PortalCount->InitWithASC(ASC);
 }
 
 void UPTWInGameHUD::ShowNotification(const FNotificationData& Data)
@@ -150,7 +148,7 @@ void UPTWInGameHUD::HandleGamePhaseChanged(EPTWGamePhase Phase)
 	{
 		switch (Phase)
 		{
-		case EPTWGamePhase::PostGameLobby:
+		case EPTWGamePhase::Lobby:
 			InventoryWidget->SetVisibility(ESlateVisibility::Visible);
 			MiniGameInventoryWidget->SetVisibility(ESlateVisibility::Collapsed);
 			PortalCount->SetVisibility(ESlateVisibility::Visible);
@@ -174,6 +172,10 @@ void UPTWInGameHUD::HandleGamePhaseChanged(EPTWGamePhase Phase)
 	{
 		MiniGameTitle->UpdateTitleByPhase(Phase);
 	}
+	if (RoundEventTitle)
+	{
+		RoundEventTitle->UpdateTitleByPhase(Phase);
+	}
 }
 
 void UPTWInGameHUD::HandleRoulettePhaseChanged(FPTWRouletteData RouletteData)
@@ -183,11 +185,16 @@ void UPTWInGameHUD::HandleRoulettePhaseChanged(FPTWRouletteData RouletteData)
 
 	EPTWGamePhase Phase = GS->GetCurrentGamePhase();
 
-	if (MiniGameTitle)
+	if (Phase == EPTWGamePhase::Lobby)
 	{
-		if (Phase == EPTWGamePhase::PostGameLobby)
+		if (MiniGameTitle)
 		{
 			MiniGameTitle->UpdateTitleByRoulette(RouletteData);
+		}
+
+		if (RoundEventTitle)
+		{
+			RoundEventTitle->UpdateTitleByRoulette(RouletteData);
 		}
 	}
 }
@@ -220,4 +227,16 @@ void UPTWInGameHUD::UnBindGameState()
 		GS->OnGamePhaseChanged.RemoveDynamic(this, &ThisClass::HandleGamePhaseChanged);
 		GS->OnRoulettePhaseChanged.RemoveDynamic(this, &ThisClass::HandleRoulettePhaseChanged);
 	}
+}
+
+UPTWInventoryComponent* UPTWInGameHUD::GetInventoryComponentFromASC(UAbilitySystemComponent* ASC) const
+{
+	if (!ASC) return nullptr;
+
+	if (APTWPlayerState* PS = Cast<APTWPlayerState>(ASC->GetOwnerActor()))
+	{
+		return PS->FindComponentByClass<UPTWInventoryComponent>();
+	}
+
+	return nullptr;
 }

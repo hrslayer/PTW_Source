@@ -35,4 +35,13 @@ void UPTWDeliveryHUD::UpdateRank(int32 CurRank, int32 Total)
 	}
 }
 
+void UPTWDeliveryHUD::PlayAnimationLowNotificationWidget(bool bIsLowBattery)
+{
+	if (LowBatteryNotificationAnim && LowBatteryNotificationOutAnim && bIsLowBattery != bIsLow)
+	{
+		PlayAnimation(bIsLowBattery ? LowBatteryNotificationAnim : LowBatteryNotificationOutAnim);
+		bIsLow = bIsLowBattery;
+	}
+}
+
 

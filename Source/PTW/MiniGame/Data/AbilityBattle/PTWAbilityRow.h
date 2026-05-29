@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "PTWTierStyleAsset.h"
 #include "PTWAbilityRow.generated.h"
 
 class UPTWAbilityDefinition;
@@ -15,7 +16,7 @@ struct FPTWAbilityRow : public FTableRowBase
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere)
-	int32 Tier;
+	EPTWAbilityTier Tier;
 	
 	UPROPERTY(EditAnywhere)
 	TSoftObjectPtr<UPTWAbilityDefinition> AbilityDefinition;

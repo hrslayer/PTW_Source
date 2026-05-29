@@ -7,7 +7,10 @@
 #include "AbilitySystemComponent.h"
 #include "PTWAttributeSet.generated.h"
 
-DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnDamageApplied, UAbilitySystemComponent* TargetActor, UAbilitySystemComponent* SourceActor, float FinalDamage);
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnDamageApplied, UAbilitySystemComponent* TargetActor,
+                                       UAbilitySystemComponent* SourceActor, float FinalDamage);
+DECLARE_MULTICAST_DELEGATE(FOnHit);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnKillApplied, AActor* KillPS);
 
 #define ATTRIBUTE_ACCESSORS(ClassName, PropertyName) \
 	GAMEPLAYATTRIBUTE_PROPERTY_GETTER(ClassName, PropertyName) \
@@ -53,6 +56,9 @@ public:
 	ATTRIBUTE_ACCESSORS(UPTWAttributeSet, IncomingDamage);
 
 	FOnDamageApplied OnDamageApplied;
+	FOnHit OnHit;
+	
+	FOnKillApplied OnKillApplied;
 protected:
 	UFUNCTION()
 	void OnRep_Health(const FGameplayAttributeData& OldHealth);

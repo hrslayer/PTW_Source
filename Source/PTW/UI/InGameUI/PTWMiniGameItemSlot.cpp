@@ -10,6 +10,7 @@
 #include "Inventory/Instance/PTWItemInstance.h"
 #include "Inventory/PTWItemDefinition.h"
 #include "Inventory/Instance/PTWActiveItemInstance.h"
+#include "Inventory/Instance/PTWWeaponInstance.h"
 
 #include "AbilitySystemComponent.h"
 #include "GameplayEffectTypes.h"
@@ -26,6 +27,25 @@ void UPTWMiniGameItemSlot::SetItemInstance(UPTWItemInstance* InItem)
 
 	UPTWItemDefinition* ItemDef = ItemInstance->GetItemDef();
 	if (!ItemDef) return;
+
+	// 무기 인스턴스인지 확인
+	bool bIsWeapon = InItem->IsA(UPTWWeaponInstance::StaticClass());
+	ESlateVisibility WeaponUIVisibility = bIsWeapon ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed;
+
+	if (SlotNumberText)
+	{
+		SlotNumberText->SetVisibility(WeaponUIVisibility);
+	}
+
+	if (WeaponNameText)
+	{
+		WeaponNameText->SetVisibility(WeaponUIVisibility);
+		if (bIsWeapon)
+		{
+			// 무기일 경우 이름 설정
+			WeaponNameText->SetText(ItemDef->DisplayName);
+		}
+	}
 
 	// 아이콘
 	if (ItemIcon)
@@ -127,6 +147,10 @@ void UPTWMiniGameItemSlot::ClearSlot()
 
 	ItemInstance = nullptr;
 
+	// 무기 전용 UI 숨기기
+	if (SlotNumberText) SlotNumberText->SetVisibility(ESlateVisibility::Collapsed);
+	if (WeaponNameText) WeaponNameText->SetVisibility(ESlateVisibility::Collapsed);
+
 	if (ItemIcon)
 	{
 		ItemIcon->SetBrushFromTexture(nullptr);
@@ -160,6 +184,33 @@ void UPTWMiniGameItemSlot::ResetCooldownUI()
 	if (CooldownText)
 	{
 		CooldownText->SetVisibility(ESlateVisibility::Hidden);
+	}
+}
+
+void UPTWMiniGameItemSlot::SetSlotNumber(int32 Number)
+{
+	if (SlotNumberText)
+	{
+		SlotNumberText->SetText(FText::AsNumber(Number));
+	}
+}
+
+void UPTWMiniGameItemSlot::SetWeaponDisplayMode(bool bShowFull)
+{
+	ESlateVisibility TargetVisibility = bShowFull ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+
+	// if (ItemIcon) ItemIcon->SetVisibility(TargetVisibility);
+	if (WeaponNameText) WeaponNameText->SetVisibility(TargetVisibility);
+}
+
+void UPTWMiniGameItemSlot::SetHighlight(bool bIsSelected)
+{
+	if (SlotNumberText)
+	{
+		// 선택된 경우 노란색, 아니면 기본 흰색
+		FLinearColor TargetColor = bIsSelected ? FLinearColor(1.f, 0.85f, 0.f) : FLinearColor::White;
+
+		SlotNumberText->SetColorAndOpacity(FSlateColor(TargetColor));
 	}
 }
 

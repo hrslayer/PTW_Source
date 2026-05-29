@@ -4,11 +4,17 @@
 #include "MiniGame/GameMode/PTWGhostChaseMiniGameMode.h"
 #include "CoreFramework/PTWPlayerState.h"
 #include "CoreFramework/PTWPlayerCharacter.h"
+#include "CoreFramework/Character/Component/PTWUIControllerComponent.h"
+#include "CoreFramework/PTWPlayerController.h"
+#include "CoreFramework/Game/GameState/PTWGameState.h"
+
 #include "System/PTWItemSpawnManager.h"
 #include "Inventory/PTWInventoryComponent.h"
 #include "MiniGame/ControllerComponent/GhostChase/PTWGhostChaseControllerComponent.h"
-#include "CoreFramework/Character/Component/PTWUIControllerComponent.h"
-#include "CoreFramework/PTWPlayerController.h"
+
+#include "GAS/PTWAttributeSet.h"
+#include "AbilitySystemComponent.h"
+#include "MiniGame/Data/PTWResultStateData.h"
 
 #define LOCTEXT_NAMESPACE "PTWGhostChaseMiniGameMode"
 
@@ -82,6 +88,9 @@ void APTWGhostChaseMiniGameMode::OnPlayerEliminated(AController* EliminatedContr
 	{
 		TargetMap.Add(ChaserOfDeadPlayer, NewTargetForChaser);
 		UpdatePlayerTargetUI(ChaserOfDeadPlayer, NewTargetForChaser);
+
+		AddStatValue(ChaserOfDeadPlayer, EPTWResultStatName::GhostChase_ChasedCount, 1); // 새로운 타겟을 추적함
+		AddStatValue(NewTargetForChaser, EPTWResultStatName::GhostChase_ChaserCount, 1); // 새로운 사람에게 추적당함
 	}
 
 	TargetMap.Remove(EliminatedController);
@@ -125,15 +134,15 @@ void APTWGhostChaseMiniGameMode::EndGame()
 	// WinType이 Survival이므로 [생존자 -> 마지막 사망자 -> ... -> 최초 사망자] 순으로 정렬됨
 	PTWGameState->UpdateRanking(MiniGameRule);
 
-	// 점수 계산 직전에만 잠시 WinType을 Target으로 변경
-	EPTWWinType OriginalType = MiniGameRule.WinConditionRule.WinType;
-	MiniGameRule.WinConditionRule.WinType = EPTWWinType::Target;
-
 	// 내부에서 PTWGameState->ApplyMiniGameRankScore(MiniGameRule)가 실행
 	Super::EndGame();
+}
 
-	// 원래 타입으로 복구
-	MiniGameRule.WinConditionRule.WinType = OriginalType;
+void APTWGhostChaseMiniGameMode::StartGame()
+{
+	Super::StartGame();
+
+	BindDamageEvent();
 }
 
 void APTWGhostChaseMiniGameMode::WaitingToStartRound()
@@ -199,6 +208,9 @@ void APTWGhostChaseMiniGameMode::SetupTargetChain()
 
 		TargetMap.Add(Chaser, Target);
 		UpdatePlayerTargetUI(Chaser, Target);
+
+		AddStatValue(Chaser, EPTWResultStatName::GhostChase_ChasedCount, 1); // 내가 추적을 시작함
+		AddStatValue(Target, EPTWResultStatName::GhostChase_ChaserCount, 1); // 나를 추적하기 시작함
 	}
 }
 
@@ -271,13 +283,56 @@ void APTWGhostChaseMiniGameMode::NotificateMessage()
 	{
 		if (APTWPlayerController* PC = Cast<APTWPlayerController>(AS->GetPlayerController()))
 		{
-			FText BeginSendMessage1 = LOCTEXT("GhostChaseBeginMsg", "자신의 목표만 공격할 수 있습니다. 목표를 차례대로 제거하고 최후의 생존자가 되세요.");
+			FText BeginSendMessage1 = LOCTEXT("GhostChaseBeginMsg01", "자신의 목표만 공격할 수 있습니다. 목표를 차례대로 제거하고 최후의 생존자가 되세요.");
 			PC->SendMessage(BeginSendMessage1, ENotificationPriority::Normal, 5);
 
-			FText BeginSendMessage2 = LOCTEXT("GhostChaseBeginMsg", "게임이 시작되면 목표의 시점이 왼쪽 상단에 표시됩니다.");
+			FText BeginSendMessage2 = LOCTEXT("GhostChaseBeginMsg02", "게임이 시작되면 목표의 시점이 왼쪽 상단에 표시됩니다.");
 			PC->SendMessage(BeginSendMessage2, ENotificationPriority::Normal, 5);
 		}
 	}
+}
+
+void APTWGhostChaseMiniGameMode::AddStatValue(AController* Controller, EPTWResultStatName StatName, int32 Amount)
+{
+	if (!Controller) return;
+
+	if (APlayerState* PS = Controller->GetPlayerState<APlayerState>())
+	{
+		FString UniqueId = PS->GetUniqueId().ToString();
+		AddResultDataValue(UniqueId, StatName, Amount);
+	}
+}
+
+void APTWGhostChaseMiniGameMode::BindDamageEvent()
+{
+	if (!PTWGameState) return;
+
+	for (APlayerState* PlayerState : PTWGameState->PlayerArray)
+	{
+		APTWPlayerState* PTWPlayerState = Cast<APTWPlayerState>(PlayerState);
+		if (!PTWPlayerState) continue;
+
+		UAbilitySystemComponent* ASC = PTWPlayerState->GetAbilitySystemComponent();
+		if (!ASC) continue;
+
+		if (const UPTWAttributeSet* AttributeSet = ASC->GetSet<UPTWAttributeSet>())
+		{
+			UPTWAttributeSet* MutableSet = const_cast<UPTWAttributeSet*>(AttributeSet);
+
+			MutableSet->OnDamageApplied.AddUObject(this, &APTWGhostChaseMiniGameMode::OnTrackedDamageApplied);
+		}
+	}
+}
+
+void APTWGhostChaseMiniGameMode::OnTrackedDamageApplied(UAbilitySystemComponent* TargetASC, UAbilitySystemComponent* SourceASC, float Damage)
+{
+	if (!SourceASC || SourceASC == TargetASC) return;
+
+	APlayerState* SourcePlayerState = Cast<APlayerState>(SourceASC->GetOwner());
+	if (!SourcePlayerState) return;
+
+	FString UniqueId = SourcePlayerState->GetUniqueId().ToString();
+	AddResultDataValue(UniqueId, EPTWResultStatName::GhostChase_Damage, Damage);
 }
 
 #undef LOCTEXT_NAMESPACE

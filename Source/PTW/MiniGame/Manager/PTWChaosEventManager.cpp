@@ -5,7 +5,7 @@
 
 #include "PTWChaosEventApply.h"
 #include "CoreFramework/Game/GameState/PTWGameState.h"
-#include "MiniGame/Data/PTWChaosItemRow.h"
+#include "Event/PTWChaosItemRow.h"
 
 
 void UPTWChaosEventManager::InitChaosEventManager(APTWGameState* InGameState, const FPTWChaosEventRule& Rule, const TArray<FPTWChaosItemEntry>& Entries)
@@ -132,7 +132,7 @@ void UPTWChaosEventManager::EndChaosEvent()
 	ClearAllTimer();
 	
 	if (!IsValid(CurrentApplyEvent)) return;
-	CurrentApplyEvent->ChaosEventEnd();
+	CurrentApplyEvent->ChaosEventEnd(PTWGameState);
 	CurrentApplyEvent = nullptr;
 
 	if (ChaosEventRule.RandomEventType == EPTWRandomEventType::Interval)

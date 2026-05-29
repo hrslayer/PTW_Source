@@ -9,6 +9,8 @@
 #include "System/Prop/PTWPropData.h"
 #include "PTWGameState.generated.h"
 
+struct FPTWPlayerData;
+struct FPTWPlayerGameData;
 class APTWPlayerState;
 
 
@@ -18,13 +20,17 @@ UENUM(BlueprintType)
 enum class EPTWGamePhase : uint8
 {
 	/** 미니 게임 시작 전 로비 */
-	PreGameLobby UMETA(DisplayName="Pre Game Lobby"),
-
+	//PreGameLobby UMETA(DisplayName="Pre Game Lobby"),
+	
+	Staging UMETA(DisplayName = "Staging"),
+	
 	/** 미니 게임 진행 */
 	MiniGame UMETA(DisplayName="Mini Game"),
 
 	/** 미니 게임 진행 후 로비 */
-	PostGameLobby UMETA(DisplayName="Post Game Lobby"),
+	//PostGameLobby UMETA(DisplayName="Post Game Lobby"),
+	
+	Lobby UMETA(DisplayName = "Lobby"),
 	
 	/** 레벨 이동 시 모든 플레이어 준비 완료 대기 상태 */
 	Loading UMETA(DisplayName = "Loading"),
@@ -41,6 +47,7 @@ UENUM(BlueprintType)
 enum class EPTWRoulettePhase : uint8
 {
 	None            UMETA(DisplayName = "None"),
+	StartRoulette   UMETA(DisplayName = "Start Roulette"),
 	MapRoulette   UMETA(DisplayName = "Map Roulette"),
 	RoundEventRoulette  UMETA(DisplayName = "Event Roulette"),
 	Finished        UMETA(DisplayName = "Finished")
@@ -98,6 +105,12 @@ struct FPTWChaosEventUIData
 
 #pragma region Delegate
 /**
+ * 플레이어가 로그아웃하면 호출되는 델리게이트
+ * - GameMode OnLogout() 함수 내에서 사용 됨.
+ */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPlayerLoggedOut, const FString&, UniqueId);
+
+/**
  * 남은 시간 변경 이벤트
  * - RemainTime이 변경될 때 브로드캐스트
  * - UI/HUD 등에서 구독하여 시간 표시 갱신에 사용
@@ -139,6 +152,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRoundChanged, int32, CurrentRound
  */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnUpdateRankedPlayers, TArray<APTWPlayerState*>, RankedPlayers);
 
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnUpdateLobbyRankingData, const TArray<FPTWLobbyRankingData>&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnUpdateMiniGameRankingData, const TArray<FPTWMiniGameRankingData>&);
 
 /**
 * 킬로그 방송을 위한 델리게이트
@@ -185,7 +200,9 @@ class PTW_API APTWGameState : public AGameState
 public:
 	/** 기본 생성자 */
 	APTWGameState();
-
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_BroadcastPlayerLoggedOut(const FString& UniqueId);
+	
 	/** 서버에서 호출하여 모든 클라이언트의 델리게이트를 실행시키는 RPC */
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_BroadcastKilllog(AActor* DeadActor, AActor* KillerActor);
@@ -218,9 +235,23 @@ public:
 	void ResetChaosItemEntries();
 	void AddPlayedMap(FName MapRowName);
 
+	//* ScoreSubsystem에 있는 데이터 전달 */
+	void InitLobbyRankingDataMap(const TMap<FString, FPTWPlayerGameData>& InData);
+	void UpdateLobbyRankingDataMap(const FString& PlayerId, const FPTWPlayerData& PlayerData);
+	void SortLobbyRankingData();
+	
+	void InitMiniGameRankingDataMap(const TMap<FString, FString>& InData);
+	void UpdateMiniGameRankingDataMap(APlayerState* InPlayerState);
+	void SortMiniGameRankingData();
+
+	void AddCurrentChaosEvent(const FGameplayTag EventTag);
+	void ResetCurrentChaosEvent();
+	
 	UPROPERTY()
 	FPTWGameData GameData;
-	
+
+	UPROPERTY(BlueprintReadWrite, Category = "Sky")
+	TObjectPtr<AActor> SkyActor;
 #pragma region Setter
 	/** 남은 시간 설정 */
 	void SetRemainTime(int32 NewTime);
@@ -239,9 +270,20 @@ public:
 	void SetMaxMiniGameRound(int32 NewMaxRound);
 
 	void SetWinTeamId(int32 TeamId);
+
+	void SetCurrentMiniGameRule(const FPTWMiniGameRule& Rule);
+
+	void SetCurrentMap(const FPTWMiniGameMapRow& CurrentMapRow);
+
+	void SetCurrentRoundEventTag(FGameplayTag NewTag) { CurrentRoundEventTag = NewTag; }
+
 #pragma endregion
 
 #pragma region Event
+	/** 플레이어 접속종료 이벤트 */
+	UPROPERTY(BlueprintAssignable, Category="GameFlow|Event")
+	FOnPlayerLoggedOut OnPlayerLoggedOut;
+	
 	/** 남은 시간 변경 이벤트 */
 	UPROPERTY(BlueprintAssignable, Category="GameFlow|Event")
 	FOnRemainTimeChanged OnRemainTimeChanged;
@@ -265,7 +307,10 @@ public:
 	/** 랭킹 플레이어 갱신 이벤트 */
 	UPROPERTY(BlueprintAssignable, Category="GameFlow|Event")
 	FOnUpdateRankedPlayers OnUpdateRankedPlayers;
-
+	
+	FOnUpdateLobbyRankingData OnUpdateLobbyRankingData;
+	FOnUpdateMiniGameRankingData OnUpdateMiniGameRankingData;
+	
 	/** 킬로그 이벤트: UI가 이 이벤트를 구독합니다. */
 	UPROPERTY(BlueprintAssignable, Category = "GameFlow|Event")
 	FOnKilllogBroadcastSignature OnKilllogBroadcast;
@@ -314,12 +359,18 @@ public:
 	FORCEINLINE int32 GetWinTeamId() const {return WinTeamId;}
 	FORCEINLINE int32 GetPortalCurrent() const { return PortalCurrent; }
 	FORCEINLINE int32 GetPortalRequired() const { return PortalRequired; }
+	FORCEINLINE TMap<FString, FPTWLobbyRankingData> GetLobbyGameRankingData() const {return LobbyRankingDataMap;}
+	FORCEINLINE FGameplayTagContainer  GetCurrentChaosEvent() const {return CurrentChaosEvent;}
+	FORCEINLINE FGameplayTag GetCurrentRoundEventTag() const { return CurrentRoundEventTag; }
 #pragma endregion
 	
 protected:
+	virtual void BeginPlay() override;
+	
 	/** 복제 설정 */
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	
 	/* 채팅 RPC */
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_BroadcastChatMessage(const FString& Sender, const FString& Message);
@@ -334,6 +385,9 @@ protected:
 	bool bMiniGameCountdown = false;
 	UPROPERTY(ReplicatedUsing = OnRep_MiniGameCountDownValue)
 	int32 MiniGameCountDown = 0;
+
+	UPROPERTY()
+	FPTWMiniGameRule CurrentMiniGameRule;
 
 #pragma region Replication
 	/** 남은 시간(초) - 서버에서 갱신, 클라이언트로 복제 */
@@ -361,6 +415,23 @@ protected:
 
 	UFUNCTION()
 	void OnRep_RankedPlayers();
+	
+	/** 랭킹 데이터 로비, 미니 게임 분리 */
+	TMap<FString, FPTWLobbyRankingData> LobbyRankingDataMap;
+	
+	UPROPERTY(VisibleAnywhere, ReplicatedUsing = OnRep_LobbyRankingData, Category = "GameFlow|Rank")
+	TArray<FPTWLobbyRankingData> LobbyRankingData;
+	
+	UFUNCTION()
+	void OnRep_LobbyRankingData();
+
+	TMap<FString, FPTWMiniGameRankingData> MiniGameRankingDataMap;
+	
+	UPROPERTY(VisibleAnywhere, ReplicatedUsing = OnRep_MiniGameRankingData, Category = "GameFlow|Rank")
+	TArray<FPTWMiniGameRankingData> MiniGameRankingData;
+	
+	UFUNCTION()
+	void OnRep_MiniGameRankingData();
 
 	UPROPERTY(VisibleAnywhere, ReplicatedUsing = OnRep_RouletteData, Category = "GameFlow|Roulette")
 	FPTWRouletteData RouletteData;
@@ -412,6 +483,15 @@ protected:
 	
 	UFUNCTION()
 	void OnRep_PropData();
+
+	UPROPERTY(Replicated)
+	FGameplayTagContainer CurrentChaosEvent;
+	
+	void TryApplyPropDataSeeded();
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Game State|Shop")
+	FGameplayTag CurrentRoundEventTag;
+
 #pragma endregion
 
 public:
@@ -436,7 +516,7 @@ public:
 	void AddTeamScore(APlayerState* Player, int32 Score);
 	
 	/** 미니 게임 순위를 기준으로 승점 부여 */
-	void ApplyMiniGameRankScore(const FPTWMiniGameRule& MiniGameRule);
+	void ApplyMatchPoints(const FPTWMiniGameRule& MiniGameRule, TMap<FString, int32> MatchPointMap);
 
 	/* 로딩스크린 업데이트용 */
 	// 현재 맵에 로딩완료된 플레이어 수

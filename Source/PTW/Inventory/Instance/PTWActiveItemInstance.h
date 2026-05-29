@@ -22,6 +22,7 @@ public:
 	bool UsingActiveItem();
 	FORCEINLINE void SetCurrentCount(){ CurrentCount =  CurrentCount == 0 ? ItemDef->MaxUsage - 1 : CurrentCount; }
 	FORCEINLINE int32 GetCurrentCount() const { return CurrentCount; }
+	FORCEINLINE float GetActiveItemBaseDamage() const {return ItemDef->ActiveItemDamage;}
 
 	UFUNCTION()
 	void OnRep_CurrentCount();

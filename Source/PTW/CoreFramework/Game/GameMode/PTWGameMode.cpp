@@ -9,27 +9,26 @@
 #include "CoreFramework/PTWDummyBotController.h"
 #include "Debug/PTWLogCategorys.h"
 #include "Kismet/GameplayStatics.h"
+#include "MiniGame/Component/PTWResultSequenceComponent.h"
 #include "PTW/CoreFramework/Game/GameState/PTWGameState.h"
-#include "System/PTWGameLiftServerSubsystem.h"
 #include "System/PTWScoreSubsystem.h"
-#include "System/PTWSteamSessionSubsystem.h"
 
 
 APTWGameMode::APTWGameMode()
 {
 	bUseSeamlessTravel = true;
+	ResultSequenceComponent = CreateDefaultSubobject<UPTWResultSequenceComponent>(TEXT("ResultSequenceComponent"));
 }
 
 void APTWGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
 {
 	Super::InitGame(MapName, Options, ErrorMessage);
+
+	ScoreSubsystem = GetGameInstance()->GetSubsystem<UPTWScoreSubsystem>();
+	if (!IsValid(ScoreSubsystem)) return;
 	
-	if (UPTWScoreSubsystem* PTWScoreSubsystem = GetGameInstance()->GetSubsystem<UPTWScoreSubsystem>())
-	{
-		CurrentRound = PTWScoreSubsystem->GetCurrentGameRound(); // GameInstance 라운드 값 받아서 GameMode에 저장
-		CachedGameData = PTWScoreSubsystem->GetSavedGameData();
-		AllPlayer = PTWScoreSubsystem->GetSavedAllPlayerCount();
-	}
+	CachedGameData = ScoreSubsystem->GetSavedGameData();
+	AllPlayer = ScoreSubsystem->GetServerTravelPlayerCount();
 }
 
 void APTWGameMode::InitGameState()
@@ -40,21 +39,21 @@ void APTWGameMode::InitGameState()
 
 	if (PTWGameState)
 	{
-		PTWGameState->SetCurrentRound(CurrentRound); // GameMode 라운드 값 받아서 GameState에 전달
+		PTWGameState->SetCurrentRound(CachedGameData.CurrentRound); // GameMode 라운드 값 받아서 GameState에 전달
 		PTWGameState->GameData = CachedGameData;
 	}
 }
 
 void APTWGameMode::BeginPlay()
 {
-	Super::BeginPlay();
-
 	if (PTWGameState)
 	{
 		PTWGameState->OnTimerFinished.AddDynamic(this, &APTWGameMode::EndTimer);
 	}
-
-	if (UPTWScoreSubsystem* ScoreSubsystem = GetGameInstance()->GetSubsystem<UPTWScoreSubsystem>())
+	
+	Super::BeginPlay();
+	
+	if (ScoreSubsystem)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[BotTravel] 새 맵 도착! 복구해야 할 봇 수: %d"), ScoreSubsystem->TravelingBotNames.Num());
 
@@ -88,7 +87,7 @@ void APTWGameMode::BeginPlay()
 					UE_LOG(LogTemp, Error, TEXT("[BotTravel] -> [에러] %s 봇이 RestartPlayer를 호출했지만 Pawn을 받지 못했습니다! (투명 봇 상태)"), *BotName);
 				}
 
-				ApplyPlayerDataFromSubsystem(NewBotCon);
+				ApplyPlayerGameDataFromSubsystem(NewBotCon);
 			}
 			else
 			{
@@ -98,31 +97,19 @@ void APTWGameMode::BeginPlay()
 
 		ScoreSubsystem->TravelingBotNames.Empty();
 	}
+}
+
+void APTWGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
 	
-#if WITH_GAMELIFT
-	if (!FParse::Param(FCommandLine::Get(), *PTWSessionKey::NoGameLift.ToString()))
-	{
-		UPTWGameLiftServerSubsystem* GameLiftServerSubsystem = UPTWGameLiftServerSubsystem::Get(this);
-		GetWorldTimerManager().SetTimer(GameLiftServerSubsystem->UpdateSessionStateTimer, [=, this]()
-		{
-			GameLiftServerSubsystem->UpdateSessionState("ACTIVE");
-		},
-		60.0f, true);
-	}
-#endif
+	Super::EndPlay(EndPlayReason);
 }
 
 void APTWGameMode::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
-
-#if WITH_GAMELIFT
-	if (!FParse::Param(FCommandLine::Get(), *PTWSessionKey::NoGameLift.ToString()))
-	{
-		UPTWGameLiftServerSubsystem* GameLiftServerSubsystem = UPTWGameLiftServerSubsystem::Get(this);
-		GameLiftServerSubsystem->UpdatePlayerCount(TEXT("Join"));
-	}
-#endif
+	
+	OnPostLogin.Broadcast(NewPlayer);
 	
 	HandlePlayerJoined(NewPlayer);
 }
@@ -131,64 +118,30 @@ void APTWGameMode::HandleStartingNewPlayer_Implementation(APlayerController* New
 {
 	Super::HandleStartingNewPlayer_Implementation(NewPlayer);
 	
-	ApplyPlayerDataFromSubsystem(NewPlayer);
-	
+	ApplyPlayerGameDataFromSubsystem(NewPlayer);
+
 }
 
 void APTWGameMode::Logout(AController* Exiting)
 {
 	FString PlayerName = TEXT("Unknown");
-	FUniqueNetIdRepl CachedUniqueNetId;
-	FString CachedPlayerSessionId;
+	FString CachedUniqueId;
 	
 	if (APlayerState* PS = Exiting->GetPlayerState<APlayerState>())
 	{
 		PlayerName = PS->GetPlayerName();
-		if (APTWPlayerController* PC = Cast<APTWPlayerController>(Exiting))
-		{
-			CachedPlayerSessionId = PC->GetPlayerSessionId();
-		}
+		CachedUniqueId = PS->GetUniqueId().IsValid() ? PS->GetUniqueId().ToString() : TEXT("");
 	}
+	OnPreLogout.Broadcast(Exiting);
 	
 	Super::Logout(Exiting);
-
-#if WITH_GAMELIFT
-	UPTWGameLiftServerSubsystem* GameLiftServerSubsystem = UPTWGameLiftServerSubsystem::Get(this);
-	if (!FParse::Param(FCommandLine::Get(), *PTWSessionKey::NoGameLift.ToString()))
-	{
-		if (IsValid(GameLiftServerSubsystem) && !CachedPlayerSessionId.IsEmpty())
-		{
-			// 로그아웃한 PlayerSession 제거
-			GameLiftServerSubsystem->RemovePlayerSession(CachedPlayerSessionId);
-			// 플레이어 수 감소
-			GameLiftServerSubsystem->UpdatePlayerCount(TEXT("Leave"));
-			if (GetNumPlayers() <= 0)
-			{
-				FTimerHandle ExitTempTimerHandle;
-				GetWorldTimerManager().SetTimer(ExitTempTimerHandle, [=, this]()
-				{
-					GameLiftServerSubsystem->OnUpdateSessionStateCompleted.Execute(TEXT("TERMINATE"));
-				}, 30.0f, false);
-				
-				GameLiftServerSubsystem->OnUpdateSessionStateCompleted.BindLambda([GameLiftServerSubsystem](const FString& Action)
-				{
-					if(Action == TEXT("TERMINATE"))
-					{
-						GameLiftServerSubsystem->ExitGameSession();
-						FGenericPlatformMisc::RequestExit(false);
-					}
-				});
-				
-				GetWorld()->GetTimerManager().ClearTimer(GameLiftServerSubsystem->UpdateSessionStateTimer);
-				GameLiftServerSubsystem->UpdateSessionState(TEXT("TERMINATE"));
-				return;
-			}
-		}
-	}
-#endif
+	
+	OnPostLogout.Broadcast(Exiting);
 	
 	if (!IsValid(PTWGameState)) return;
-
+	
+	if (!ScoreSubsystem) return;
+	
 	// 플레이어가 로그 아웃 했을 때 ready 상태였을 경우 ReadyPlayer 감소 
 	if (APTWPlayerState* PlayerState = Exiting->GetPlayerState<APTWPlayerState>())
 	{
@@ -197,14 +150,19 @@ void APTWGameMode::Logout(AController* Exiting)
 			PlayerState->bIsReadyToPlay = false;
 			ReadyPlayer = FMath::Max(0, ReadyPlayer - 1);
 		}
+		
+		SavePlayerGameData(PlayerState);
 	}
-	
-	AllPlayer--;
 	
 	if (PTWGameState)
 	{
 		FString LeaveMsg = FString::Printf(TEXT("Player '%s' has left the game."), *PlayerName);
 		PTWGameState->Multicast_SystemMessage(LeaveMsg);
+		
+		if (!CachedUniqueId.IsEmpty())
+		{
+			PTWGameState->Multicast_BroadcastPlayerLoggedOut(CachedUniqueId);
+		}
 	}
 	
 	CheckAllPlayersLoaded();
@@ -264,25 +222,6 @@ void APTWGameMode::PrepareAllPlayersLoadingScreen(ELoadingScreenType Type, FName
 	}
 }
 
-FString APTWGameMode::InitNewPlayer(APlayerController* NewPlayer, const FUniqueNetIdRepl& UniqueId,
-	const FString& Options, const FString& Portal)
-{
-	FString ErrorMessage = Super::InitNewPlayer(NewPlayer, UniqueId, Options, Portal);
-
-	if (ErrorMessage.IsEmpty())
-	{
-		FString PlayerSessionId = UGameplayStatics::ParseOption(Options, TEXT("PlayerSessionId"));
-		
-		if (APTWPlayerController* PC = Cast<APTWPlayerController>(NewPlayer))
-		{
-			PC->SetPlayerSessionId(PlayerSessionId);
-			UE_LOG(LogTemp, Log, TEXT("PlayerSessionId [%s] 캐싱 완료!"), *PlayerSessionId);
-		}
-	}
-
-	return ErrorMessage;
-}
-
 void APTWGameMode::CheckAllPlayersLoaded()
 {
 	APTWGameState* GS = GetGameState<APTWGameState>();
@@ -295,33 +234,15 @@ void APTWGameMode::CheckAllPlayersLoaded()
 
 void APTWGameMode::PlayerReadyToPlay(APlayerController* Controller)
 {
-	ReadyPlayer++;
+	if (!Controller) return;
 
-	if (APlayerController* PC = Cast<APlayerController>(Controller))
+	APTWPlayerState* PlayerState = Controller->GetPlayerState<APTWPlayerState>();
+	if (!PlayerState) return;
+
+	if (!PlayerState->bIsReadyToPlay)
 	{
-		if (PC->PlayerState)
-		{
-			PC->PlayerState->SetIsSpectator(false);
-			PC->PlayerState->SetIsOnlyASpectator(false);
-		}
-		else
-		{
-			UE_LOG(Log_GameMode, Error, TEXT("[PlayerReadyToPlay] 플레이어 스테이트가 유효하지 않습니다"));
-		}
-		
-		// if (APawn* CurrentPawn = PC->GetPawn())
-		// {
-		// 	CurrentPawn->Destroy();
-		// }
-		
-		GetWorld()->GetTimerManager().SetTimerForNextTick([PC, this]()
-		{
-			if (!PC->GetPawn())
-			{
-				RestartPlayer(PC);
-				UE_LOG(Log_GameMode, Warning, TEXT("[PlayerReadyToPlay] %s 플레이어 Pawn을 재스폰하였습니다."), *PC->PlayerState->GetPlayerName());
-			}
-		});
+		PlayerState->bIsReadyToPlay = true;
+		ReadyPlayer++;
 	}
 }
 
@@ -336,12 +257,7 @@ void APTWGameMode::Multicast_CloseLoadingScreen_Implementation()
 void APTWGameMode::HandlePlayerJoined(AController* JoinedController)
 {
 	if (!JoinedController) return;
-
-	if (UPTWScoreSubsystem* PTWScoreSubsystem = GetGameInstance()->GetSubsystem<UPTWScoreSubsystem>())
-	{
-		PTWScoreSubsystem->IncreasePlayerCount();
-	}
-
+	
 	FString PlayerName = TEXT("Unknown");
 	if (APTWPlayerState* PS = JoinedController->GetPlayerState<APTWPlayerState>())
 	{
@@ -353,8 +269,7 @@ void APTWGameMode::HandlePlayerJoined(AController* JoinedController)
 		FString JoinMsg = FString::Printf(TEXT("Player '%s' has joined the game."), *PlayerName);
 		PTWGameState->Multicast_SystemMessage(JoinMsg);
 	}
-
-	AllPlayer = GetNumPlayers();
+	
 }
 
 void APTWGameMode::HandleSeamlessTravelPlayer(AController*& C)
@@ -502,28 +417,7 @@ void APTWGameMode::PreLogin(const FString& Options, const FString& Address, cons
 	
 	Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
 	
-#if WITH_GAMELIFT
-	if (!FParse::Param(FCommandLine::Get(), *PTWSessionKey::NoGameLift.ToString()))
-	{
-		FString PlayerSessionId = UGameplayStatics::ParseOption(Options, TEXT("PlayerSessionId"));
-		if (!PlayerSessionId.IsEmpty())
-		{
-			UPTWGameLiftServerSubsystem* GameLiftServerSubsystem = UPTWGameLiftServerSubsystem::Get(this);
-			if (IsValid(GameLiftServerSubsystem))
-			{
-				bool bIsSuccess = GameLiftServerSubsystem->AcceptPlayerSession(PlayerSessionId);
-				if (!bIsSuccess)
-				{
-					ErrorMessage = TEXT("Invalid GameLift Player Session");
-				}
-			}
-		}
-		else
-		{
-			ErrorMessage = TEXT("Missing PlayerSessionId");
-		}
-	}
-#endif
+	OnPreLogin.Broadcast(Options, Address, UniqueId, ErrorMessage);
 }
 
 void APTWGameMode::TravelLevel()
@@ -573,64 +467,101 @@ void APTWGameMode::SetInputBlock(bool bInputBlock)
 	}
 }
 
+void APTWGameMode::SavePlayerGameData(APTWPlayerState* PlayerState)
+{
+	if (!IsValid(PlayerState) || !IsValid(ScoreSubsystem)) return;
+
+	FPTWPlayerGameData PlayerGameData;
+	PlayerGameData.PlayerData = PlayerState->GetPlayerData();
+	PlayerGameData.LobbyItemData = PlayerState->GetLobbyItemData();
+	
+	ScoreSubsystem->SavePlayerGameData(PlayerState->GetUniqueId().ToString(),PlayerGameData);
+}
+
 void APTWGameMode::SaveGameDataToSubsystem()
 {
 	if (!PTWGameState) return;
-	if (UPTWScoreSubsystem* PTWScoreSubsystem = GetGameInstance()->GetSubsystem<UPTWScoreSubsystem>())
+	if (!IsValid(ScoreSubsystem)) return;
+	
+	ScoreSubsystem->SaveServerTravelPlayerCount(GetNumPlayers());
+	ScoreSubsystem->SaveGameData(PTWGameState->GameData);
+	ScoreSubsystem->RemoveTravelPlayersId();
+	
+	for (APlayerState* PlayerState : PTWGameState->PlayerArray)
 	{
-		PTWScoreSubsystem->SaveGameRound(PTWGameState->GetCurrentRound());
-		PTWScoreSubsystem->SaveAllPlayerCount(GetNumPlayers());
-		PTWScoreSubsystem->SaveGameData(PTWGameState->GameData);
-
-		for (APlayerState* PlayerState : PTWGameState->PlayerArray)
+		if (APTWPlayerState* PTWPlayerState = Cast<APTWPlayerState>(PlayerState))
 		{
-			if (APTWPlayerState* PTWPlayerState = Cast<APTWPlayerState>(PlayerState))
+			SavePlayerGameData(PTWPlayerState);
+			ScoreSubsystem->AddTravelPlayerId(PTWPlayerState->GetUniqueId().ToString(), PTWPlayerState->GetPlayerData().PlayerName);
+		}
+	}
+
+	ScoreSubsystem->TravelingBotNames.Empty();
+	int32 SavedBotCount = 0;
+
+	for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
+	{
+		if (APTWDummyBotController* BotCon = Cast<APTWDummyBotController>(It->Get()))
+		{
+			if (APlayerState* PS = BotCon->GetPlayerState<APlayerState>())
 			{
-				PTWScoreSubsystem->SavePlayerData(PTWPlayerState->GetPlayerName(), PTWPlayerState->GetPlayerData());
-				PTWScoreSubsystem->SaveLobbyItemData(PTWPlayerState->GetPlayerName(), PTWPlayerState->GetLobbyItemData());
+				FString BName = PS->GetPlayerName();
+				ScoreSubsystem->TravelingBotNames.Add(BName);
+				SavedBotCount++;
+				UE_LOG(LogTemp, Warning, TEXT("[BotTravel] 로비에서 봇 명단 저장됨: %s"), *BName);
 			}
 		}
+	}
+	UE_LOG(LogTemp, Warning, TEXT("[BotTravel] 트래블 직전 총 %d 마리의 봇 명단이 서브시스템에 기록됨!"), SavedBotCount);
+}
 
-		PTWScoreSubsystem->TravelingBotNames.Empty();
-		int32 SavedBotCount = 0;
+void APTWGameMode::ApplyPlayerGameDataFromSubsystem(AController* NewPlayer)
+{
+	if (!NewPlayer) return;
+	if (!IsValid(ScoreSubsystem)) return;
+	
+	if (APTWPlayerState* PTWPlayerState = NewPlayer->GetPlayerState<APTWPlayerState>())
+	{
+		// if (FPTWPlayerData* FoundData = PTWScoreSubsystem->FindPlayerData(PTWPlayerState->GetPlayerName()))
+		// {
+		// 	PTWPlayerState->SetPlayerData(*FoundData);
+		// 	
+		// }
+		// if (FPTWLobbyItemData* FoundData = PTWScoreSubsystem->FindLobbyItemData(PTWPlayerState->GetPlayerName()))
+		// {
+		// 	PTWPlayerState->SetLobbyItemData(*FoundData);
+		// }
 
-		for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
+		if (FPTWPlayerGameData* FoundData = ScoreSubsystem->FindPlayerGameData(PTWPlayerState->GetUniqueId().ToString()))
 		{
-			if (APTWDummyBotController* BotCon = Cast<APTWDummyBotController>(It->Get()))
-			{
-				if (APlayerState* PS = BotCon->GetPlayerState<APlayerState>())
-				{
-					FString BName = PS->GetPlayerName();
-					PTWScoreSubsystem->TravelingBotNames.Add(BName);
-					SavedBotCount++;
-					UE_LOG(LogTemp, Warning, TEXT("[BotTravel] 로비에서 봇 명단 저장됨: %s"), *BName);
-				}
-			}
+			PTWPlayerState->SetPlayerData(FoundData->PlayerData);
+			PTWPlayerState->SetLobbyItemData(FoundData->LobbyItemData);
 		}
-		UE_LOG(LogTemp, Warning, TEXT("[BotTravel] 트래블 직전 총 %d 마리의 봇 명단이 서브시스템에 기록됨!"), SavedBotCount);
+		else
+		{
+			FPTWPlayerData PlayerData = PTWPlayerState->GetPlayerData();
+			PlayerData.PlayerName = PTWPlayerState->GetPlayerName();
+			PTWPlayerState->SetPlayerData(PlayerData);
+			
+			FPTWPlayerGameData PlayerGameData;
+			PlayerGameData.PlayerData = PTWPlayerState->GetPlayerData();
+			PlayerGameData.LobbyItemData = PTWPlayerState->GetLobbyItemData();
+			
+			ScoreSubsystem->AddConnectedPlayerId(PTWPlayerState->GetUniqueId().ToString(), PlayerGameData);
+		}
+			
 	}
 }
 
-void APTWGameMode::ApplyPlayerDataFromSubsystem(AController* NewPlayer)
+void APTWGameMode::StartResultSequence()
 {
-	if (!NewPlayer) return;
-	
-	if (UPTWScoreSubsystem* PTWScoreSubsystem = GetGameInstance()->GetSubsystem<UPTWScoreSubsystem>())
-	{
-		if (APTWPlayerState* PTWPlayerState = NewPlayer->GetPlayerState<APTWPlayerState>())
-		{
-			if (FPTWPlayerData* FoundData = PTWScoreSubsystem->FindPlayerData(PTWPlayerState->GetPlayerName()))
-			{
-				PTWPlayerState->SetPlayerData(*FoundData);
+	if (!ResultSequenceComponent) return;
+	ResultSequenceComponent->StartResultSequence();
+}
 
-				UE_LOG(LogTemp, Warning, TEXT("Player Gold: %d"), FoundData->Gold);
-			}
-			if (FPTWLobbyItemData* FoundData = PTWScoreSubsystem->FindLobbyItemData(PTWPlayerState->GetPlayerName()))
-			{
-				PTWPlayerState->SetLobbyItemData(*FoundData);
-			}
-		}
-	}
+bool APTWGameMode::IsWinner(APTWPlayerState* InPlayerState)
+{
+	return false;
 }
 
 void APTWGameMode::UpdateTimer()

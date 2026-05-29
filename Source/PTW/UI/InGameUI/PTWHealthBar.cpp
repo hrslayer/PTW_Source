@@ -14,16 +14,7 @@ void UPTWHealthBar::NativeConstruct()
 void UPTWHealthBar::NativeDestruct()
 {
 	/* 델리게이트 Unbind (UI 파괴될 때 크래시 방지) */
-	if (AbilitySystemComponent)
-	{
-		AbilitySystemComponent
-			->GetGameplayAttributeValueChangeDelegate(UPTWAttributeSet::GetHealthAttribute())
-			.Remove(HealthChangedHandle);
-
-		AbilitySystemComponent
-			->GetGameplayAttributeValueChangeDelegate(UPTWAttributeSet::GetMaxHealthAttribute())
-			.Remove(MaxHealthChangedHandle);
-	}
+	UnBindGASDelegates();
 
 	Super::NativeDestruct();
 }
@@ -31,6 +22,11 @@ void UPTWHealthBar::NativeDestruct()
 void UPTWHealthBar::InitWithASC(UAbilitySystemComponent* ASC)
 {
 	if (!ASC) return;
+
+	if (AbilitySystemComponent)
+	{
+		UnBindGASDelegates();
+	}
 
 	AbilitySystemComponent = ASC;
 
@@ -54,6 +50,30 @@ void UPTWHealthBar::BindGASDelegates(UAbilitySystemComponent* ASC)
 	MaxHealthChangedHandle =
 		ASC->GetGameplayAttributeValueChangeDelegate(UPTWAttributeSet::GetMaxHealthAttribute())
 		.AddUObject(this, &UPTWHealthBar::OnMaxHealthAttributeChanged);
+}
+
+void UPTWHealthBar::UnBindGASDelegates()
+{
+	if (AbilitySystemComponent)
+	{
+		if (HealthChangedHandle.IsValid())
+		{
+			AbilitySystemComponent
+				->GetGameplayAttributeValueChangeDelegate(UPTWAttributeSet::GetHealthAttribute())
+				.Remove(HealthChangedHandle);
+
+			HealthChangedHandle.Reset();
+		}
+
+		if (MaxHealthChangedHandle.IsValid())
+		{
+			AbilitySystemComponent
+				->GetGameplayAttributeValueChangeDelegate(UPTWAttributeSet::GetMaxHealthAttribute())
+				.Remove(MaxHealthChangedHandle);
+
+			MaxHealthChangedHandle.Reset();
+		}
+	}
 }
 
 void UPTWHealthBar::OnHealthAttributeChanged(const FOnAttributeChangeData& Data)

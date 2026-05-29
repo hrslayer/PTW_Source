@@ -1,5 +1,3 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-
 using UnrealBuildTool;
 using System.Collections.Generic;
 
@@ -10,8 +8,13 @@ public class PTWServerTarget : TargetRules
 		Type = TargetType.Server;
 		DefaultBuildSettings = BuildSettingsVersion.V6;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_7;
-		ExtraModuleNames.Add("PTW");
 		
+		ExtraModuleNames.Add("PTW");
+		if (Target.Configuration == UnrealTargetConfiguration.Shipping)
+		{
+			ExtraModuleNames.Add("PTWDedicatedServer");
+		}
+
 		bUseLoggingInShipping = true;
 		bUseChecksInShipping = true;
 	}

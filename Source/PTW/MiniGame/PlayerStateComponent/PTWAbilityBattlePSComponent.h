@@ -21,6 +21,9 @@ public:
 	void Init(APTWPlayerState* PlayerState);
 
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
+
+	UFUNCTION(Server, Reliable)
+	void Server_SetCurrentDraft(const TArray<FName>& NewDraft);
 	
 	void AddDraftCharges();
 	void DecreaseDraftCharges();

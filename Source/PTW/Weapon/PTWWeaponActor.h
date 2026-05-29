@@ -37,13 +37,19 @@ public:
 	FORCEINLINE bool IsFirstPersonMode() const {return bIsFirstPersonWeapon;}
 
 	UFUNCTION(BlueprintCallable, Category = "Reload")
-	void HandleReloadEvent(EReloadEventAction ActionType);
+	virtual void HandleReloadEvent(EReloadEventAction ActionType);
 
-	float PlayWeaponMontage(UAnimMontage* MontageToPlay);
+	float PlayWeaponMontage(UAnimMontage* MontageToPlay, float PlayRate= 1.0f);
 	
 	void SetWeaponItemInstance(UPTWWeaponInstance* ItemInstance);
 	
-	FORCEINLINE UPTWWeaponInstance* GetWeaponItemInstance() const {return WeaponItemInstance;}
+	FORCEINLINE UPTWWeaponInstance* GetWeaponItemInstance() const
+	{
+		if (WeaponItemInstance == nullptr)
+			return nullptr;
+		
+		return WeaponItemInstance;
+	}
 
 protected:
 	virtual void BeginPlay() override;
